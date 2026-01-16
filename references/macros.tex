@@ -1,0 +1,443 @@
+\usepackage[most]{tcolorbox}
+\usepackage{listings}
+\usepackage{textcomp}
+\usepackage{xspace}
+
+\newcommand{\originalgrumbler}[2]{\begin{quote}\textcolor{blue}{\sl{\bf #1:} #2}\end{quote}}
+\newcommand{\grumbler}[2]{\originalgrumbler{#1}{#2}}
+\newcommand{\swarnendu}[1]{\grumbler{Swarnendu}{#1}}
+\newcommand{\vipin}[1]{\grumbler{Vipin}{#1}}
+\newcommand{\mainak}[1]{\grumbler{Mainak}{#1}}
+\newcommand{\binong}[1]{\grumbler{Binong}{#1}}
+
+% For a comment you still want to show up when grumbler is disabled, use \urgent{\yourname{...}}
+\newcommand{\urgent}[1]{{\renewcommand{\grumbler}[2]{\originalgrumbler{##1}{##2}}#1}}
+\newcommand{\doubt}[1]{\textcolor{violet}{DOUBT: #1}}
+\newcommand{\hilite}[1]{\textcolor{red}{HILITE: #1}}
+% \newcommand{\remark}[1]{{\bf [ \footnotesize #1 ]}}
+\newcommand{\later}[1]{\begin{quote}\textcolor{darkgreen}{\textbackslash \textbf{later\{}} #1 \textcolor{darkgreen}{\}}\end{quote}}
+\newcommand{\revise}[1]{\textcolor{orange}{REVISE: #1}}
+\newcommand{\savespace}[1]{\textcolor{purple}{SAVESPACE: #1}}
+
+% Define colors
+\definecolor{darkgreen}{rgb}{0,0.4,0}
+\definecolor{mygreen}{rgb}{0,0.6,0}
+\definecolor{mygray}{rgb}{0.5,0.5,0.5}
+\definecolor{mauve}{rgb}{0.58,0,0.82}
+\definecolor{backgroundColor}{rgb}{0.95,0.95,0.92}
+
+\lstdefinelanguage{Generic}
+{
+    comment=[l]{//}
+}
+
+\lstdefinestyle{GenericStyle}{
+    % draw a frame at the top and bottom of the code block
+    language=Generic,
+    frame=tb,
+    backgroundcolor=\color{backgroundColor},
+    basicstyle=\small\sffamily,
+    keywordstyle=\color{black}\textbf,
+    stringstyle=\ttfamily,
+    commentstyle=\footnotesize\color{darkgreen},
+    % print empty lines at the end of listings
+    showlines=true,
+    numbers=left,
+    numberstyle=\tiny\color{mygray},
+    stepnumber=1,
+    numbersep=3pt,
+    tabsize=2,
+    showstringspaces=false
+}
+
+\lstdefinestyle{BashStyle}{
+    language=bash,
+    % draw a frame at the top and bottom of the code block
+    frame=tb,
+    backgroundcolor=\color{backgroundColor},
+    basicstyle=\small\sffamily,
+    % print empty lines at the end of listings
+    showlines=true,
+    numbers=left,
+    numberstyle=\tiny\color{mygray},
+    stepnumber=1,
+    numbersep=3pt,
+    tabsize=2,
+    showstringspaces=false,
+    %columns=fullflexible,
+    %linewidth=\textwidth,
+    %xleftmargin=0.1\linewidth
+    morekeywords={wget, tar, make, sudo}
+}
+
+\lstdefinestyle{JavaStyle}{
+    language=Java,
+    % draw a frame at the top and bottom of the code block
+    frame=tb,
+    backgroundcolor=\color{backgroundColor},
+    basicstyle=\small\sffamily,
+    keywordstyle=\color{blue}\textbf,
+    commentstyle=\color{darkgreen}\textit,
+    stringstyle=\color{mauve}\ttfamily,
+    % print empty lines at the end of listings
+    showlines=true,
+    numbers=left,
+    numberstyle=\tiny\color{mygray},
+    stepnumber=1,
+    numbersep=3pt,
+    tabsize=2,
+    extendedchars=true,
+    breaklines=true,
+    escapeinside={\%*}{*)}, % if you want to add LaTeX within your code
+    %columns=flexible,
+    showstringspaces=false,
+    emph={assert},
+    emphstyle=\color{blue}\textbf
+}
+
+\lstdefinestyle{CPPStyle}{
+    language=C++,
+    % draw a frame at the top and bottom of the code block
+    frame=tb,
+    backgroundcolor=\color{backgroundColor},
+    basicstyle=\footnotesize\ttfamily,
+    keywordstyle=\color{blue}\textbf,
+    stringstyle=\color{mauve}\ttfamily,
+    commentstyle=\color{darkgreen}\textit,
+    morecomment=[l][\color{magenta}]{\#},
+    % replaces each occurrence of two consecutive spaces by one,
+    % literate = *{\ \ }{\ }1,
+    % print empty lines at the end of listings
+    showlines=true,
+    numbers=left,
+    numberstyle=\tiny\color{mygray},
+    stepnumber=1,
+    numbersep=3pt,
+    tabsize=2,
+    showstringspaces=false
+}
+
+\lstdefinestyle{CStyle}{
+    language=C,
+    % draw a frame at the top and bottom of the code block
+    frame=tb,
+    backgroundcolor=\color{backgroundColor},
+    basicstyle=\footnotesize\ttfamily,
+    keywordstyle=\color{blue}\textbf,
+    commentstyle=\color{darkgreen}\textit,
+    stringstyle=\color{mauve}\ttfamily,
+    morecomment=[l][\color{magenta}]{\#},
+    % print empty lines at the end of listings
+    showlines=true,
+    numbers=left,
+    numberstyle=\tiny\color{mygray},
+    stepnumber=1,
+    numbersep=3pt,
+    tabsize=2,
+    showstringspaces=false,
+    % breakatwhitespace=false,
+    %breaklines=true,
+    % captionpos=b,
+    % keepspaces=true,
+    % showspaces=false,
+    % showtabs=false,
+}
+
+\lstdefinestyle{PythonStyle}{
+    language=Python,
+    % draw a frame at the top and bottom of the code block
+    frame=tb,
+    backgroundcolor=\color{backgroundColor},
+    basicstyle=\small\ttfamily,
+    keywordstyle=\color{blue}\textbf,
+    commentstyle=\color{darkgreen}\textit,
+    stringstyle=\color{darkgreen}\textit,
+    showlines=true, % print empty lines at the end of listings
+    numbers=left,
+    numberstyle=\tiny\color{mygray},
+    stepnumber=1,
+    numbersep=3pt,
+    tabsize=4,
+    otherkeywords={self},             % Add keywords here
+    emph={MyClass,__init__},          % Custom highlighting
+    emphstyle=\ttb\color{deepred},    % Custom highlighting style
+    showstringspaces=false
+}
+
+\newcommand{\lstfont}[1]{\color{#1}\scriptsize\ttfamily}
+
+\lstdefinestyle{CUDAStyle}{
+    language=C++,
+    frame=tb, % draw a frame at the top and bottom of the code block
+    backgroundcolor=\color{backgroundColor},
+    basicstyle=\footnotesize\ttfamily,
+    keywordstyle=\color{blue}\textbf,
+    % identifierstyle=\lstfont{white},
+    stringstyle=\color{red}\ttfamily,
+    commentstyle=\color{darkgreen}\textit,
+    emph={
+            cudaMalloc, cudaFree, __global__, __shared__, __device__, __host__, __syncthreads, cudaMallocManaged, cudaDeviceSynchronize, cudaMemcpy, cudaStream_t, cudaError_t, cudaMemcpyAsync, cudaStreamCreate, cudaStreamSynchronize, cudaStreamDestroy, __threadfence, cudaGetDevice, cudaMemPrefetchAsync
+        },
+    emphstyle=\color{darkgreen}\bf\ttfamily,
+    % print empty lines at the end of listings
+    showlines=true,
+    numbers=left,
+    numberstyle=\tiny\color{mygray},
+    stepnumber=1,
+    numbersep=3pt,
+    tabsize=2,
+    showstringspaces=false,
+    % breakatwhitespace=false,
+    breaklines=true,
+    % captionpos=b,
+    % keepspaces=true,
+    moredelim=[s][\ttfamily]{<<<}{>>>},
+    % showspaces=false,
+    % showtabs=false,
+}
+
+\lstdefinestyle{TraceStyle}{
+    language=C,
+    frame=tb,
+    backgroundcolor=\color{white},
+    commentstyle=\color{mygreen}\textit,
+    basicstyle=\footnotesize\ttfamily,
+    keywordstyle=\color{magenta},
+    numberstyle=\tiny\color{mygray},
+    stringstyle=\color{mauve},
+    % breakatwhitespace=false,
+    breaklines=true,
+    showlines=true,
+    % captionpos=b,
+    % keepspaces=true,
+    numbers=left,
+    numbersep=3pt,
+    % showspaces=false,
+    showstringspaces=false,
+    % showtabs=false,
+    tabsize=2
+}
+
+\lstdefinelanguage[RISC-V]{Assembler}
+{
+    alsoletter={.}, % allow dots in keywords
+    alsodigit={0x}, % hex numbers are numbers too!
+    morekeywords=[1]{ % instructions
+            lb, lh, lw, lbu, lhu,
+            sb, sh, sw,
+            sll, slli, srl, srli, sra, srai,
+            add, addi, sub, lui, auipc,
+            xor, xori, or, ori, and, andi,
+            slt, slti, sltu, sltiu,
+            beq, bne, blt, bge, bltu, bgeu,
+            j, jr, jal, jalr, ret,
+            scall, break, nop
+        },
+    morekeywords=[2]{ % sections of our code and other directives
+            .align, .ascii, .asciiz, .byte, .data, .double, .extern,
+            .float, .globl, .half, .kdata, .ktext, .set, .space, .text, .word
+        },
+    morekeywords=[3]{ % registers
+            zero, ra, sp, gp, tp, s0, fp,
+            t0, t1, t2, t3, t4, t5, t6,
+            s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11,
+            a0, a1, a2, a3, a4, a5, a6, a7,
+            ft0, ft1, ft2, ft3, ft4, ft5, ft6, ft7,
+            fs0, fs1, fs2, fs3, fs4, fs5, fs6, fs7, fs8, fs9, fs10, fs11,
+            fa0, fa1, fa2, fa3, fa4, fa5, fa6, fa7
+        },
+    morecomment=[l]{;},   % mark ; as line comment start
+    morecomment=[l]{\#},  % as well as # (even though it is unconventional)
+    morestring=[b]",      % mark " as string start/end
+    morestring=[b]'       % also mark ' as string start/end
+}
+
+\lstdefinelanguage[x64]{Assembler}     % add a "x64" dialect of Assembler
+[x86masm]{Assembler} % based on the "x86masm" dialect
+{
+    % with these extra keywords:
+    morekeywords={CDQE,CQO,CMPSQ,CMPXCHG16B,JRCXZ,LODSQ,MOVSXD, %
+            POPFQ,PUSHFQ,SCASQ,STOSQ,IRETQ,RDTSCP,SWAPGS, %
+            PUSHQ,MOVQ,SUBQ,ADDQ,ADDL,ADDW,MOVL,ADDB, %
+            addi, bnez, %
+            rax,rdx,rcx,rbx,rsi,rdi,rsp,rbp, %
+            r8,r8d,r8w,r8b,r9,r9d,r9w,r9b, %
+            r10,r10d,r10w,r10b,r11,r11d,r11w,r11b, %
+            r12,r12d,r12w,r12b,r13,r13d,r13w,r13b, %
+            r14,r14d,r14w,r14b,r15,r15d,r15w,r15b}, % etc.
+    % mark ; as line comment start
+    morecomment=[l]{;},
+    frame=tb,
+    backgroundcolor=\color{backgroundColor},
+    basicstyle=\footnotesize\ttfamily,
+    keywordstyle=\color{blue},
+    stringstyle=\color{mauve}\ttfamily,
+    commentstyle=\color{darkgreen}\textit,
+    showlines=true,
+    numbers=left,
+    numberstyle=\tiny\color{mygray},
+    stepnumber=1,
+    numbersep=3pt
+}
+
+\lstdefinestyle{AlgolStyle}{
+    language=Algol,
+    % draw a frame at the top and bottom of the code block
+    frame=tb,
+    backgroundcolor=\color{backgroundColor},
+    basicstyle=\small\sffamily,
+    keywordstyle=\color{black}\textbf,
+    commentstyle=\color{darkgreen}\textit,
+    stringstyle=\color{mauve}\ttfamily,
+    % print empty lines at the end of listings
+    showlines=true,
+    numbers=left,
+    numberstyle=\tiny\color{mygray},
+    stepnumber=1,
+    numbersep=3pt,
+    tabsize=2,
+    extendedchars=true,
+    breaklines=true,
+    escapeinside={\%*}{*)}, % if you want to add LaTeX within your code
+    %columns=flexible,
+    showstringspaces=false
+}
+
+\lstdefinestyle{PascalStyle}{
+    language=Pascal,
+    % draw a frame at the top and bottom of the code block
+    frame=tb,
+    backgroundcolor=\color{backgroundColor},
+    basicstyle=\small\sffamily,
+    keywordstyle=\color{black}\textbf,
+    commentstyle=\color{darkgreen}\textit,
+    stringstyle=\color{mauve}\ttfamily,
+    % print empty lines at the end of listings
+    showlines=true,
+    numbers=left,
+    numberstyle=\tiny\color{mygray},
+    stepnumber=1,
+    numbersep=3pt,
+    tabsize=2,
+    extendedchars=true,
+    breaklines=true,
+    escapeinside={\%*}{*)}, % if you want to add LaTeX within your code
+    %columns=flexible,
+    showstringspaces=false
+}
+
+\lstdefinestyle{PerlStyle}{
+    % draw a frame at the top and bottom of the code block
+    language=Perl,
+    frame=tb,
+    backgroundcolor=\color{backgroundColor},
+    basicstyle=\small\sffamily,
+    keywordstyle=\color{black}\textbf,
+    stringstyle=\ttfamily,
+    commentstyle=\footnotesize\color{darkgreen},
+    % print empty lines at the end of listings
+    showlines=true,
+    numbers=left,
+    numberstyle=\tiny\color{mygray},
+    stepnumber=1,
+    numbersep=3pt,
+    tabsize=2,
+    showstringspaces=false
+}
+
+\newcommand{\bench}[1]{\textsf{\small #1}}
+\newcommand{\code}[1]{\texttt{\small #1}}
+\newcommand{\pcode}[1]{\textsf{\small #1}}
+
+\newcommand{\mc}[3]{\multicolumn{#1}{#2}{#3}}
+\newcommand{\ra}{\( \rightarrow \)}
+
+\newcommand{\eg}{e.g.\xspace}
+\newcommand{\ie}{i.e.\xspace}
+\newcommand{\cf}{cf.\xspace}
+\newcommand{\etal}{et al.\xspace}
+\newcommand{\defacto}{\emph{de facto}\xspace}
+
+% Commonly used words with umlauts
+\newcommand{\naive}{na\"{\i}ve\xspace}
+\newcommand{\Naive}{Na\"{\i}ve\xspace}
+\newcommand{\naively}{na\"{\i}vely\xspace}
+\newcommand{\Naively}{Na\"{\i}vely\xspace}
+
+% Suggestion to avoid orphans
+\clubpenalty= 10000
+\widowpenalty= 10000
+\displaywidowpenalty=10000
+
+\tcbset{
+    frame code={}
+    center title,
+    left=0pt,
+    right=0pt,
+    top=0pt,
+    bottom=0pt,
+    colback=gray!20,
+    colframe=white,
+    width=\dimexpr\textwidth\relax,
+    enlarge left by=0mm,
+    boxsep=5pt,
+    arc=0pt,outer arc=0pt,
+}
+
+% https://tex.stackexchange.com/questions/4302/prettiest-way-to-typeset-c-cplusplus
+\def\CPP{{C\nolinebreak[4]\hspace{-.05em}\raisebox{.1ex}{\footnotesize\bf ++\xspace}}}
+\def\CPPNOXSPACE{{C\nolinebreak[4]\hspace{-.05em}\raisebox{.1ex}{\footnotesize\bf ++}}}
+
+\hyphenation{gar-bage}
+\hyphenation{program-mer}
+\hyphenation{spe-ci-fied}
+
+% \graphicspath{{./figs/}}
+
+\newcommand{\nvidia}{NVIDIA\xspace}
+\newcommand{\NVIDIA}{NVIDIA\xspace}
+
+\newcommand{\resneteighteen}{ResNet-18\xspace}
+\newcommand{\resnetfifty}{ResNet-50\xspace}
+\newcommand{\vggsixteen}{VGG-16\xspace}
+
+% Algorithms
+\newcommand{\bigO}[1]{\( \mathcal{O} \left( #1 \right) \)}
+\newcommand\letequal{$\gets$\xspace}
+
+\newcommand{\overbar}[1]{\mkern 1.5mu\overline{\mkern-1.5mu#1\mkern-1.5mu}\mkern 1.5mu}
+\newcommand{\mathcolorbox}[2]{\colorbox{#1}{$\displaystyle #2$}}
+
+\DeclareMathOperator*{\argmax}{\textsf{arg\,max}}
+\DeclareMathOperator*{\argmin}{\textsf{arg\,min}}
+
+% Single quotes in math mode
+\DeclareMathSymbol{\mlq}{\mathord}{operators}{``}
+\DeclareMathSymbol{\mrq}{\mathord}{operators}{`'}
+
+\newcommand{\cudakernel}[2]{\texttt{\textlangle{}\textlangle{}\textlangle{}}#1,#2\texttt{\textrangle{}\textrangle{}\textrangle{}}}
+
+% Larger-sized bullet
+\newcommand\largerbullet[1][.5]{\mathbin{\vcenter{\hbox{\scalebox{#1}{$\bullet$}}}}}
+
+\newcommand*\graymathbox[1]{%
+    \colorbox{gray!10}{\hspace{1em}#1\hspace{1em}}%
+}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Project-specific
+
+\newcommand{\htuvm}{\textsf{HT-UVM}\xspace}
+\newcommand{\Htuvm}{\textsf{HT-UVM}\xspace}
+
+\newcommand{\htovs}{\textsf{HT-OVS}\xspace}
+\newcommand{\Htovs}{\textsf{HT-OVS}\xspace}
+
+\newcommand{\skipuvm}{\textsf{SL-UVM}\xspace}
+\newcommand{\Skipuvm}{\textsf{SL-UVM}\xspace}
+
+\newcommand{\skipovs}{\textsf{SL-OVS}\xspace}
+\newcommand{\Skipovs}{\textsf{SL-OVS}\xspace}
+
+% \newcommand{\heterosl}{\textsf{Hetero-SL}\xspace}
+\newcommand{\heterosl}{\textsf{SL-OVS}\xspace}
