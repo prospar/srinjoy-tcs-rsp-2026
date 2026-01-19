@@ -42,8 +42,38 @@
     Lack of locality in the input operation strings and sub-optimal implementation choices can lead to irregular access patterns and poor data locality. When memory oversubscription is
     coupled with these performance pathologies, these data structures exhibit very poor scalability.
     
+    
     \section{Existing Solutions}
     No current solutions for such a problem hasn't been explored as far our knowledge. For most of such problems, the best way currently in usage is to execute the huge input workload in multiple batches such that each workload fits within the GPU memory. For certain cases, where a system has multiple GPUs ~\cite{warpdrive} proposed a multi gpu hashtable that can use both the GPUs and in turn can handle large workloads. But this type of setup is not only expensive but will also run into the same problem for even larger workloads.
+    
+    \section{Relevant GPU Hashtables}
+    
+    As mentioned hashtables are data structures that stores key-value pairs. Now when two different keys collide for the same empty slot, hashtable provides two types of methods to solve this collision, which in turn divides hashtables in two broader classes: open addressing hashtable and closed 
+    addressing hashtable. 
+    Based on this two method, as far as our knowledge the most two relevant works are ~\cite{slabhash-ipdps-2020} and ~\cite{warpcore}.
+    Slabhash uses a closed addressing based collision resolution technique. It uses a Work Coperative Work Sharing(WCWS) strategy, where each warp gets a(a block of 32 threads working in lock step manner) gets each operation. They uses specialized nodes(called slabnodes) that stores 31 key-value pairs and a pointer to next node. They uses a special memory allocator called slab allocator, which allocates a new slabnode whenever necessary.
+    \begin{figure}
+        \centering
+          \includegraphics[scale=0.7]{"./figs/slabhash.drawio.pdf"}
+        \caption{Slabhash layout}
+        \label{fig:slabhash-design}
+    \end{figure}
+  
+    However, closed-addressing hash tables suffer from frequent random memory accesses. This behavior significantly degrades cache locality and renders hardware prefetching largely ineffective for large workloads. In particular, a key that would logically be placed in an adjacent slot may instead require the allocation of a new node located in a distant memory region, further exacerbating memory latency and performance variability.
+  
+    Accordingly, we adopt WarpCore as the baseline for our design, which employs open addressing as its collision-resolution strategy. Open addressing offers superior cache locality, making it particularly well suited to our approach, as hardware prefetchers can be leveraged effectively. WarpCore also employs the Warp-Cooperative Work Sharing (WCWS) strategy: if a thread within a warp fails to insert a key, another thread in the same warp that has identified an empty slot attempts the insertion. If all threads in the warp fail, each thread computes a secondary hash and collectively probes the next consecutive 32 slots in the hash table. 
+    
+    Both the hashtable uses cooperative groups(cg) which is similar to a warp except now the warps becomes smaller with 2,4,8 or 16 threads(as specified in the program).
+  
+    \begin{figure}
+    \centering
+      \includegraphics[scale=0.7]{"./figs/WCWS.pdf"}
+    \caption{Warpcore layout}
+    \label{fig:warpcore-design}
+    \end{figure}
+    
+    But all of this works develop in memory hashtable.
+     
     
     \section{Our current work}
     We have designed UVM-based implementation of hash tables with modified structures that performes well even with memory oversubscription. We compared our design with the existing state-of-the-art hashtables like cucollections\href{https://github.com/NVIDIA/cuCollections/tree/dev} and ~\cite{warpcore}. For valid comparison, we update this models to support memory oversubscription and we observe that they suffer greatly because of far faults. So we designed our hashtable such that these far faults are reduced.
@@ -54,6 +84,7 @@
     also planning on improving the algorithms of the current state-of-the-art amqs such that they receive a substantial performance boost. 
     
    
-    \bibliography{./references/venue-full,./references/references}
+    \bibliographystyle{plain}
+    \bibliography{./references}
 
 \end{document}
