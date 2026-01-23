@@ -1,0 +1,13 @@
+*.aux
+*.bbl
+*.blg
+*.fls
+*.fdb_latexmk
+
+/**/.directory
+proposal.out
+proposal.pdf
+proposal.log
+
+/references
+/auto 

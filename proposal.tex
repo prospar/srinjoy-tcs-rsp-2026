@@ -10,10 +10,10 @@
 \date{} %leave this blank
 
 \begin{center}
-    \Large{Efficient data structures for GPU under oversubscription} \\
+    \Large{Designing Efficient GPU Data Structures for Oversubscription} \\
     \vspace{1em}
     \normalsize{\textbf{Srinjoy Sarkar}} \\
-    \normalsize{Department of Computer Science Engineering}\\
+    \normalsize{Department of Computer Science Engineering,}\\
     \normalsize{IIT Kanpur, India}  \\
     \normalsize{Email:  
     srinjoys23@cse.iitk.ac.in}
@@ -22,13 +22,48 @@
 
     %\swarnendu{Try to avoid tabs in general.}
 
+\begin{abstract}
+  Efficient concurrent data structures are important building blocks for accelerating applications on GPUs. With ever-increasing memory footprint of GPU workloads, data structures used by kernels can exceed global memory capacity. Using the unified virtual memory (UVM) model is a popular approach for kernels to oversubscribe GPU memory without the need for explicit memory management by a programmer. However, data structures executing with UVM can suffer from performance degradation due to the high overheads associated with data migration and thrashing under irregular access patterns.
+
+  We propose to work on efficient GPU data structure designs to handle use cases
+  where the application working set oversubscribes GPU memory. In particular, we
+  plan to work on the following popular data structures: hash table, skip list,
+  and approximate membership filter. We have profiled existing implementations
+  of these data structures, and have identified several bottlenecks in the
+  design. Furthermore, these data structures are characterized by random
+  accesses, and hence encounter frequent pages faults and unnecessary data
+  migrations between the CPU and the GPU with the UVM programming model. We plan
+  to explore alternate designs (\eg, hierarchical layout) for these data
+  structures to maximize access locality. The insight is that the outer-level
+  containers enable efficient jumps to desired regions of the data structure,
+  while the inner containers allows operating on the data. Our preliminary
+  results show that our custom data structure designs substantially improve
+  performance over optimized UVM baselines while supporting high degree of GPU
+  memory oversubscription for many inputs.
+\end{abstract}
+
+
     \section{Introduction}
     The high compute capability and memory bandwidth of GPUs, coupled with energy efficiency, have spurred their usage across a diverse set of application domains including scientific computing simulations, big data and large-scale graph analytics, and computational biology~\cite{nvidia-applications}. Improved compute capabilities have led to a steady rise in the working set sizes of
     GPU-accelerated applications, which now often far exceed the GPU global memory capacity~\cite{dynamap,uvm-forest-isca25}.
     Hence, the traditional copy-then-execute (CTE) programming model is giving way to the newer unified virtual memory (UVM) paradigm, where the CPU virtual address space is also visible to GPU kernels. GPU vendors have introduced memory virtualization support through features such
     as unified virtual addressing, demand paging, and prefetching. UVM allows the host CPU and discrete GPU devices to share a unified virtual address space, enabling the GPU runtime to page memory in and out as needed~\cite{hum-ppopp-2020,dynamap}. Demand paging in UVM-capable GPUs facilitates
     transparent memory oversubscription, improving programmer productivity. The cost of servicing GPU page faults can be reduced by prefetching a chunk of nearby pages~\cite{cppe-ipdps-2020,uvmsmart-isca-2019,uvm-forest-isca25,hpe-tcad-2020}. Writing correct but scalable multithreaded GPU kernels is a difficult art~\cite{massively-parallel-processors,kernelbench-arxiv}. In addition to the algorithm and the compute capabilities of the GPU device, the scalability of the application depends on the building blocks of the kernel, \eg, GPU data structures. For example, the performance of the Pinterest application improved substantially by switching to GPU-accelerated hash tables~\cite{pinterest-perf-boost}. Therefore, the design of more complex structures such as lists and trees is an active area of research~\cite{gpu-gems2}. Much recent work has focused on designing efficient data structures (\eg, hash tables, skip lists, B-trees, and membership query filters) for use in device code~\cite{slabhash-ipdps-2020,dachash-sbacpad-2021,warpcore-hipc-2020,warpdrive,parallel-hashmap-nvidia,survey-hashing-tpds-2020,bght,dycuckoo,gph-pamd-2025,gfsl-pact-2017,lockfree-skiplist-ipdpsw-2019,skiplist-survey-2025,multiversion-btree,gpu-filters-ppopp23,harmonia-gpu,gpu-btree,gpu-gelhash,survey-hashing-tpds-2020,lockfree-ds-icpads-2012,quotient-filter,stdgpu,cucollections-nvidia,gpu-cds}.
+
     
+    While UVM simplifies programming, its efficiency remains a major concern due
+    to frequent far faults and high address translation overheads. Memory
+    virtualization on the GPU introduces additional sources of overhead (e.g.,
+    address translation and page migration) that are opaque to the programmer.
+    Demand paging in UVM is implemented by the GPU's UVM driver, which processes
+    far faults\footnote{Far faults occur when a requested page is absent in
+      device memory and is present in host memory.} from the CPU as well as GPU,
+    and transparently migrates data as required. The GPU hardware and the driver
+    may optionally implement additional features like prefetching to optimize
+    data migration~\cite{uvmsmart-isca-2019,uvm-forest-isca25}, but these
+      techniques often fail when applications with irregular access patterns
+      oversubscribe memory.
+
     \section{The Problem}
     The steady increase in the working set size and irregular access patterns of GPU applications require more efficient memory management so that the GPU data structures efficiently scale with the input size. However, existing studies primarily focus on the traditional CTE model and do not address how to design efficient data structures that oversubscribe memory, and developers fall back to UVM. While UVM simplifies programming, its performance remains a significant concern due to frequent far faults
     \footnote{Far faults, which occur when a requested page is absent in GPU global memory, require multiple PCIe roundtrips, and are resolved after interacting with the CPU page tables. On \NVIDIA GPUs, a far fault from a CUDA thread stalls the progress of the warp, possibly affecting the overall GPU throughput.},
@@ -83,8 +118,9 @@
     We are planning on extending this idea to amq ie, designing a amq that doesn't suffer a huge performance overhead for memory oversubscription. We are
     also planning on improving the algorithms of the current state-of-the-art amqs such that they receive a substantial performance boost. 
     
-   
+\begin{small}
     \bibliographystyle{plain}
     \bibliography{./references}
-
+  \end{small}
+  
 \end{document}
