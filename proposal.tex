@@ -1,3 +1,4 @@
+\pdfminorversion=7
 \documentclass[12pt,a4paper]{article}
 
 \input{"./references/preamble.tex"}
@@ -85,7 +86,7 @@ Hence, the traditional copy-then-execute (CTE) programming model is giving way t
 as unified virtual addressing, demand paging, and prefetching. UVM allows the host CPU and discrete GPU devices to share a unified virtual address space, enabling the GPU runtime to page memory in and out as needed~\cite{hum-ppopp-2020,dynamap}. Demand paging in UVM-capable GPUs facilitates
 transparent memory oversubscription, improving programmer productivity. The cost of servicing GPU page faults can be reduced by prefetching a chunk of nearby pages~\cite{cppe-ipdps-2020,uvmsmart-isca-2019,uvm-forest-isca25,hpe-tcad-2020}.
 
-Writing correct but scalable multithreaded GPU kernels is a difficult art~\cite{massively-parallel-processors,kernelbench-arxiv}. In addition to the algorithm and the compute capabilities of the GPU device, the scalability of the application depends on the building blocks of the kernel, \eg, GPU data structures. For example, the performance of the Pinterest application improved substantially by switching to GPU-accelerated hash tables~\cite{pinterest-perf-boost}. Therefore, the design of sophisticated GPU data structures such as lists and trees is an active area of research~\cite{gpu-gems2}. Much recent work has focused on designing efficient data structures (\eg, hash tables, skip lists, B-trees, and membership query filters) for use in device code~\cite{slabhash-ipdps-2020,dachash-sbacpad-2021,warpcore-hipc-2020,warpdrive,parallel-hashmap-nvidia,survey-hashing-tpds-2020,bght,dycuckoo,gph-pamd-2025,gfsl-pact-2017,lockfree-skiplist-ipdpsw-2019,skiplist-survey-2025,multiversion-btree,gpu-filters-ppopp23,harmonia-gpu,gpu-btree,gpu-gelhash,survey-hashing-tpds-2020,lockfree-ds-icpads-2012,quotient-filter,stdgpu,cucollections-nvidia,gpu-cds}.
+Writing correct but scalable multithreaded GPU kernels is a difficult art~\cite{massively-parallel-processors,kernelbench-arxiv}. In addition to the algorithm and the compute capabilities of the GPU device, the scalability of the application depends on the building blocks of the kernel, \eg, GPU data structures. For example, the performance of the Pinterest application improved substantially by switching to GPU-accelerated hash tables~\cite{pinterest-perf-boost}. Therefore, the design of sophisticated GPU data structures such as lists and trees is an active area of research~\cite{gpu-gems2}. Much recent work has focused on designing efficient data structures (\eg, hash tables, skip lists, B-trees, and membership query filters) for use in device code~\cite{slabhash-ipdps-2020,dachash-sbacpad-2021,warpcore-hipc-2020,warpdrive,parallel-hashmap-nvidia,survey-hashing-tpds-2020,bght,dycuckoo,gph-pamd-2025,gfsl-pact-2017,cmedia-skiplist-ipdpsw-2019,skiplist-survey-2025,multiversion-btree,gpu-filters-ppopp23,harmonia-gpu,gpu-btree,gpu-gelhash,survey-hashing-tpds-2020,lockfree-ds-icpads-2012,quotient-filter,stdgpu,cucollections-nvidia,gpu-cds}.
 
 \paragraph*{The Problem}
 
@@ -126,70 +127,73 @@ of concurrent data structures for GPUs.
 
 \section*{Brief Literature Review}
 
-\subsection*{Hash Table}
+In this section, we briefly review existing approaches for designing hash tables and skip lists for GPUs.
+
+\paragraph*{Hash Table}
 
 Hash tables are popularly used for tracking key-value relationships in a
 sparse domain because of their expected constant time complexity for
-different operations like insert() and search(). The performance of a hash
+different operations like insert and search. The performance of a hash
 table depends on the memory layout, access pattern dictated by the input
 operation string, quality of the hash functions, and other design decisions
 like collision resolution and dynamic resizing techniques. Different
 approaches [25, 40] have been explored for CPUs over several decades and
 many libraries provide efficient CPU implementations with different features
-(e.g., concurrent hash maps from oneTBB2 and Folly3 ).
+(e.g., concurrent hash maps from \textsf{oneTBB}\footnote{\url{https://github.com/uxlfoundation/oneTBB}} and \textsf{Folly}\footnote{\url{https://github.com/facebook/folly}}).
 
-Hash table designs for GPUs can be divided into static [2, 21, 23, 28, 29,
-        43] and dynamic [6, 8, 14, 27, 36, 69] designs. The container array in the
+Hash table designs for GPUs can be divided into static~\cite{cudpp-hashtable,gpu-stadium-hashing,gpu-parallel-hashing,lockfree-ds-icpads-2012,warpcore-hipc-2020,hashgraph} and dynamic~\cite{slabhash-ipdps-2020,dachash-sbacpad-2021,warpdrive,bght,gph-pamd-2025,dycuckoo} designs. The container array in the
 hash table is not resizable in the static design, which implies that the
 former category of approaches make a worst-case estimate on the number of
 unique keys before allocating memory. Static memory allocation without
 knowing an accurate estimate of the number of unique keys can waste memory.
+
 GPU data structure kernels provide bulk APIs that work on multiple data
-elements in parallel to avoid frequent expensive kernel launches [6, 14, 28,
-        44]. A natural division of work in bulk-API- based kernels is to assign an
+elements in parallel to avoid frequent expensive kernel launches~\cite{slabhash-ipdps-2020,warpcore-hipc-2020,gfsl-pact-2017,gph-pamd-2025}. A natural division of work in bulk-API- based kernels is to assign an
 operation on a (key, value) pair to a CUDA thread. However, given the
 potentially irregular input-dependent access pattern of the data structures,
 assigning a different key to each thread in a warp leads to branch and
 memory divergence. The Warp-Cooperative Work-Sharing (WCWS) strategy,
-popularly followed by recent approaches [6, 27–29, 44], tries to ameliorate
+popularly followed by recent approaches~\cite{slabhash-ipdps-2020,warpcore-hipc-2020,warpdrive,gfsl-pact-2017,gpu-stadium-hashing}, tries to ameliorate
 branch and memory divergence by assigning an operation to a warp.
 
-SlabHash [6] uses closed addressing for conflict resolution. Unlike
-traditional linked lists, each bucket in SlabHash is organized as a list of
-super-nodes where each super-node consists of multiple key-value pairs
-including a pointer to the next node (Figure 1). A super-node is sized based
-on the warp size (e.g., 32 for NVIDIA GPUs). SlabHash requires a custom
-memory allocator to handle frequent and concurrent dynamic allocation of
-super-nodes to support resizing. DACHash [69] extends SlabHash to sort the
-input sequence for better access locality, and dynamically assigns work to
-either each thread or a warp based on the number of super-nodes in the
-relevant bucket. WarpCore [28] proposes a static hash table, i.e., the table
-is not dynamically resized, and uses open addressing for resolving
-collisions. WarpCore assigns an operation on a (key, value) pair to one
-cooperative group, and all threads in a cooperative group participate to
-carry out the operation (e.g., performs a parallel probe to resolve
-conflicts). WarpCore may potentially suffer from high overheads in case
-there is a large proportion of negative queries (e.g., failed delete() or
-search() operations) at high load factors because it has to keep iterating
-through the hash table till it encounters an empty slot [8].
+\emph{SlabHash}~\cite{slabhash-ipdps-2020} uses closed addressing for conflict
+resolution. Unlike traditional linked lists, each bucket in SlabHash is
+organized as a list of super-nodes where each super-node consists of multiple
+key-value pairs including a pointer to the next node (Figure 1). A super-node is
+sized based on the warp size (e.g., 32 for NVIDIA GPUs). SlabHash requires a
+custom memory allocator to handle frequent and concurrent dynamic allocation of
+super-nodes to support resizing. \emph{DACHash}~\cite{dachash-sbacpad-2021}
+extends SlabHash to sort the input sequence for better access locality, and
+dynamically assigns work to either each thread or a warp based on the number of
+super-nodes in the relevant bucket. \emph{WarpCore}~\cite{warpcore-hipc-2020}
+proposes a static hash table, i.e., the table is not dynamically resized, and
+uses open addressing for resolving collisions. WarpCore assigns an operation on
+a (key, value) pair to one cooperative group, and all threads in a cooperative
+group participate to carry out the operation (e.g., performs a parallel probe to
+resolve conflicts). WarpCore may potentially suffer from high overheads in case
+there is a large proportion of negative queries (e.g., failed delete or
+search operations) at high load factors because it has to keep iterating
+through the hash table till it encounters an empty slot~\cite{bght}.
 
-DyCuckoo [36] divides the hash table array into d smaller tables of equal
-capacity and uses Cuckoo hashing [54] to lower the cost of rehashing when
-the table is resized. The hash table is downsized or upsized if the load
-factor crosses respective thresholds. Thus, DyCuckoo improves the amortized
-cost of hash table operations that includes negative queries and dynamic
-resizing. GPH [14] improves the performance of searches by adapting a
+\emph{DyCuckoo}~\cite{dycuckoo} divides the hash table array into d smaller
+tables of equal capacity and uses Cuckoo hashing~\cite{cuckoo-hashing} to lower
+the cost of rehashing when the table is resized.
+% The hash table is downsized or upsized if the load factor crosses respective
+% thresholds. Thus, DyCuckoo improves the amortized cost of hash table
+% operations that includes negative queries and dynamic resizing.
+GPH~\cite{gph-pamd-2025} improves the performance of searches by adapting a
 perfect hashing scheme. It uses a cost model to gauge the performance of the
 hash table based on the occupancy, number of instructions executed, and the
-cycles per instruction. GPH divides the hash table into n contiguous
-buckets, and maintains an auxiliary array in per-SM shared memory to store
-the mapping and offset for each bucket. GPH uses three hash functions to
-calculate the destination bucket for a key k. The first hash function maps
-the key to an auxiliary array index I . The second hash function calculates
-the virtual bucket ID v using the mapping stored at index I and key k. The
-third hash function computes the destination bucket. The auxiliary array
-allows GPH to perform insert and search operations with a fixed number of
-probes.
+cycles per instruction. GPH divides the hash table into $n$ contiguous buckets,
+and maintains an auxiliary array in per-SM shared memory to store the mapping
+and offset for each bucket. GPH uses three hash functions to calculate the
+destination bucket for a key $k$.
+% The first hash function maps the key to an auxiliary array index I . The
+% second hash function calculates the virtual bucket ID v using the mapping
+% stored at index I and key k. The third hash function computes the destination
+% bucket.
+The auxiliary array allows GPH to perform insert and search operations with a
+fixed number of probes.
 
 \subsection*{Skip List}
 
@@ -248,7 +252,7 @@ No current solutions for such a problem hasn't been explored as far our knowledg
 
 As mentioned hashtables are data structures that stores key-value pairs. Now when two different keys collide for the same empty slot, hashtable provides two types of methods to solve this collision, which in turn divides hashtables in two broader classes: open addressing hashtable and closed
 addressing hashtable.
-Based on this two method, as far as our knowledge the most two relevant works are ~\cite{slabhash-ipdps-2020} and ~\cite{warpcore}.
+Based on this two method, as far as our knowledge the most two relevant works are ~\cite{slabhash-ipdps-2020} and ~\cite{warpcore-hipc-2020}.
 Slabhash uses a closed addressing based collision resolution technique. It uses a Work Coperative Work Sharing(WCWS) strategy, where each warp gets a(a block of 32 threads working in lock step manner) gets each operation. They uses specialized nodes(called slabnodes) that stores 31 key-value pairs and a pointer to next node. They uses a special memory allocator called slab allocator, which allocates a new slabnode whenever necessary.
 \begin{figure}
     \centering
@@ -451,7 +455,7 @@ designs that take into consideration the potential lack of locality in the acces
 following, we discuss the design of a hash table and a skip list that scales better with input size.
 
 
-We have designed UVM-based implementation of hash tables with modified structures that performes well even with memory oversubscription. We compared our design with the existing state-of-the-art hashtables like cucollections\href{https://github.com/NVIDIA/cuCollections/tree/dev} and ~\cite{warpcore}. For valid comparison, we update this models to support memory oversubscription and we observe that they suffer greatly because of far faults. So we designed our hashtable such that these far faults are reduced.
+We have designed UVM-based implementation of hash tables with modified structures that performes well even with memory oversubscription. We compared our design with the existing state-of-the-art hashtables like cucollections\href{https://github.com/NVIDIA/cuCollections/tree/dev} and ~\cite{warpcore-hipc-2020}. For valid comparison, we update this models to support memory oversubscription and we observe that they suffer greatly because of far faults. So we designed our hashtable such that these far faults are reduced.
 Our current work is currently under submission in a reputed conference.
 
 \subsection{Designing Oversubscribed Data Structures}
