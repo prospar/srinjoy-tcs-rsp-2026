@@ -243,6 +243,22 @@ traditional skip list, a key in GFSL is raised to the higher level only on a
 node split operation. Like hash tables, the super-node is sized to match the
 size of a warp (\ie, $N + 2$ is 32).
 
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=\columnwidth]{"./figs/gfsl-node-overview1.drawio.pdf"}
+    \caption{Super-nodes in index and data layers in GFSL}
+    \label{fig:gfsl-node}
+\end{figure}
+
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=0.9\columnwidth]{"./figs/gfsl-design-overview-sb.drawio.pdf"}
+    \caption{GFSL with two keys per super-node
+      % and search of key 11
+    }
+    \label{fig:gfsl-design}
+  \end{figure}
+
 \section{Relevant GPU Hashtables}
 
 As mentioned hashtables are data structures that stores key-value pairs. Now when two different keys collide for the same empty slot, hashtable provides two types of methods to solve this collision, which in turn divides hashtables in two broader classes: open addressing hashtable and closed
