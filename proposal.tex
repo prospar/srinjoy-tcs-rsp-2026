@@ -127,7 +127,7 @@ of concurrent data structures for GPUs.
 
 \section*{Brief Literature Review}
 
-In this section, we briefly review existing approaches for designing hash tables and skip lists for GPUs.
+In this section, we briefly review existing approaches for designing hash tables and skip lists for GPUs without memory oversubscription. We are not aware of existing work that focuses on improving performance for UVM-enabled GPU applications.
 
 \paragraph*{Hash Table}
 
@@ -195,58 +195,53 @@ destination bucket for a key $k$.
 The auxiliary array allows GPH to perform insert and search operations with a
 fixed number of probes.
 
-\subsection*{Skip List}
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=0.8\columnwidth]{"./figs/basic-skiplist-design-simplified.drawio.pdf"}
+    \caption{Layout of a traditional skip list. The data layer shows the keys in stored in the skip list. The dotted bold black line shows the sequence of pointers traversed while searching for the key 11.}
+    \label{fig:skiplist-design}
+\end{figure}
 
-A skip list [56] is a probabilistic data structure that allows efficient
-insertion, deletion, and search operations on sorted linked lists.
-Rebalancing height-balanced trees is challenging while supporting concurrent
-operations, and hence skip lists are used as a simpler alternative to a
-deterministically balanced tree. A skip list is organized as a hierarchy of
+\paragraph*{Skip List}
+
+A skip list~\cite{skiplist-cacm-1990} is a probabilistic data structure that
+allows efficient insertion, deletion, and search operations on sorted linked
+lists. Rebalancing height-balanced trees is challenging while supporting
+concurrent operations, and hence skip lists are used as a simpler alternative to
+a deterministically balanced tree. A skip list is organized as a hierarchy of
 linked lists, where higher-level lists are always contained in lower-level
-lists. The list at the lowest level (L 0 ) contains the data elements in a
-sorted order. We refer to the lowest level L0 as the data layer, and the
-upper levels as the index layers. Figure 2 shows the structure of a skip
-list traditionally used in CPUs. A skip list employs skip pointers for
-efficiently searching through the data structure (denoted by dense black
-arrows in Figure 2). Unlike balanced trees, a skip list does not require
-expensive rebalancing after mutation operations while achieving an expected
-logarithmic search time. Xing et al. [64] survey different variants of skip
-lists.
+lists. The list at the lowest level ($L_{0}$) contains the data elements in a
+sorted order. We refer to the lowest level $L_{0}$ as the data layer, and the
+upper levels as the index layers. Figure~\ref{fig:skiplist-design} shows the
+structure of a skip list traditionally used in CPUs. A skip list employs skip
+pointers for efficiently searching through the data structure (denoted by dense
+black arrows in Figure~\ref{fig:skiplist-design}). Unlike balanced trees, a skip
+list does not require expensive rebalancing after mutation operations while
+achieving an expected logarithmic search time. Xing \etal survey different
+variants of skip lists~\cite{skiplist-survey-2025}.
 
-Misra and Chaudhuri [43] ported the linearizable construction of a lock-free
-skip list algorithm described by Herlihy and Shavit [25] to GPUs. Moscovici
-et al. [44] proposed GPU-friendly skip list (GFSL) which tries to reduce the
-memory footprint and performance penalty due to uncoalesced global memory
-accesses on a GPU. GFSL also uses the concept of super-nodes for linked
-lists at each level. Figure 3 shows the organization of a super-node in the
-index and data layers in GFSL. Each super-node in GFSL contains N + 2 (key,
-value) pairs. A value field in an index layer i (DownPtr) stores a pointer
-to the relevant super-node in the layer i-i, and stores the data
-associated with the corresponding key in the data layer. The last two pairs
-are used to store the maximum key in the node (MaxKey), a pointer to the
-next node at the same level (NextPtr), and a lock to ensure mutual exclusion
-during concurrent mutations. Figure 4 shows a schematic of the GFSL design
-where each super-node accommodates two keys. The blue dashed arrow shows the
-path taken while searching for the key 11. A super-node is split if an
-insert operation finds the node to be full, and a new super-node is added to
-the skip list containing half of the values from the split parent
-super-node. In contrast to traditional skip list, a key in GFSL is raised to
-the higher level only on a node split operation. Like hash tables, the
-super-node is sized to match the size of a warp (i.e., N + 2 is 32).
-
-While GFSL is a lock-based design for discrete-memory GPUs, CMSL [18] is a
-lock-free skip list designed for Intel’s integrated GPUs using the “C for
-media” framework. CMSL has 16 keys per super-node unlike GFSL which combines
-32 keys. CMSL also employs instruction level parallelism using vector
-instructions to read two super-nodes in parallel. CMSL rely on SIMD16 CAS
-instruction exclusive to Intel GPUs for performing updates to the data layer
-blocks.
-
-\subsection*{AMQ}
-
-In this section, we briefly review existing approaches for designing hash tables, skip lists, and AMQs for GPUs. We are not aware of existing work that focuses on improving performance for UVM-enabled GPU applications.
-
-No current solutions for such a problem hasn't been explored as far our knowledge.
+Misra and Chaudhuri~\cite{lockfree-ds-icpads-2012} ported the linearizable
+construction of a lock-free skip list algorithm described by Herlihy and
+Shavit~\cite{art-of-multiprocessor-programming-v2} to GPUs. Moscovici
+\etal~\cite{gfsl-pact-2017} proposed GPU-friendly skip list (GFSL) which tries
+to reduce the memory footprint and performance penalty due to uncoalesced global
+memory accesses on a GPU. GFSL also uses the concept of super-nodes for linked
+lists at each level. Figure~\ref{fig:gfsl-node} shows the organization of a
+super-node in the index and data layers in GFSL. Each super-node in GFSL
+contains $N + 2$ (key, value) pairs. A value field in an index layer $i$
+(\code{DownPtr}) stores a pointer to the relevant super-node in the layer $i-i$,
+and stores the data associated with the corresponding key in the data layer. The
+last two pairs are used to store the maximum key in the node (\code{MaxKey}), a
+pointer to the next node at the same level (\code{NextPtr}), and a lock to
+ensure mutual exclusion during concurrent mutations.
+Figure~\ref{fig:gfsl-design} shows a schematic of the GFSL design where each
+super-node accommodates two keys. The blue dashed arrow shows the path taken
+while searching for the key 11. A super-node is split if an insert operation
+finds the node to be full, and a new super-node is added to the skip list
+containing half of the values from the split parent super-node. In contrast to
+traditional skip list, a key in GFSL is raised to the higher level only on a
+node split operation. Like hash tables, the super-node is sized to match the
+size of a warp (\ie, $N + 2$ is 32).
 
 \section{Relevant GPU Hashtables}
 
