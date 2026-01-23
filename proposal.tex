@@ -267,50 +267,28 @@ size of a warp (\ie, $N + 2$ is 32).
     \label{fig:gfsl-design}
   \end{figure}
 
-\section{Relevant GPU Hashtables}
+  \section*{Problem Statement and Proposed Approach}
 
-As mentioned hashtables are data structures that stores key-value pairs. Now when two different keys collide for the same empty slot, hashtable provides two types of methods to solve this collision, which in turn divides hashtables in two broader classes: open addressing hashtable and closed
-addressing hashtable.
-Based on this two method, as far as our knowledge the most two relevant works are ~\cite{slabhash-ipdps-2020} and ~\cite{warpcore-hipc-2020}.
-Slabhash uses a closed addressing based collision resolution technique. It uses a Work Coperative Work Sharing(WCWS) strategy, where each warp gets a(a block of 32 threads working in lock step manner) gets each operation. They uses specialized nodes(called slabnodes) that stores 31 key-value pairs and a pointer to next node. They uses a special memory allocator called slab allocator, which allocates a new slabnode whenever necessary.
+  In the following, we outline our proposal's key research objectives which aim
+  to explore efficient data structure designs for popular GPU data structures such as hash tables, skip lists, and AMQs with oversubscription.
 
-\begin{figure}
-    \centering
-    \includegraphics[scale=0.7]{"./figs/slabhash.drawio.pdf"}
-    \caption{Slabhash layout}
-    \label{fig:slabhash-design}
-\end{figure}
+  \begin{itemize}
+    \item Extend existing in-memory designs to work with oversubscription,
+    \item Show limitations in using only \nvidia-provided APIs for managing data movement for designing UVM-enabled data structures,
+    \item Propose new designs for popular GPU data structures such as the hash table, skip list, and AMQ,
+    \item Validate the efficiency of our new designs by integrating our implementations in real-world applications.
+  \end{itemize}
 
-However, closed-addressing hash tables suffer from frequent random memory accesses. This behavior significantly degrades cache locality and renders hardware prefetching largely ineffective for large workloads. In particular, a key that would logically be placed in an adjacent slot may instead require the allocation of a new node located in a distant memory region, further exacerbating memory latency and performance variability.
-
-Accordingly, we adopt WarpCore as the baseline for our design, which employs open addressing as its collision-resolution strategy. Open addressing offers superior cache locality, making it particularly well suited to our approach, as hardware prefetchers can be leveraged effectively. WarpCore also employs the Warp-Cooperative Work Sharing (WCWS) strategy: if a thread within a warp fails to insert a key, another thread in the same warp that has identified an empty slot attempts the insertion. If all threads in the warp fail, each thread computes a secondary hash and collectively probes the next consecutive 32 slots in the hash table.
-
-Both the hashtable uses cooperative groups(cg) which is similar to a warp except now the warps becomes smaller with 2,4,8 or 16 threads(as specified in the program).
-
-\begin{figure}
-    \centering
-    \includegraphics[scale=0.7]{"./figs/WCWS.pdf"}
-    \caption{Warpcore layout}
-    \label{fig:warpcore-design}
-\end{figure}
-
-But all of this works develop in memory hashtable.
-
-\subsection{Manual Memory Management}
-
-For most of such problems, the best way currently in usage is to execute the huge input workload in multiple batches such that each workload fits within the GPU memory. For certain cases, where a system has multiple GPUs ~\cite{warpdrive} proposed a multi gpu hashtable that can use both the GPUs and in turn can handle large workloads. But this type of setup is not only expensive but will also run into the same problem for even larger workloads.
-
-\section{Designing UVM-based Data Structures}
+  We expand each objective in more detail in the following.
+  
+\subsection*{Extending Existing Designs for UVM}
 
 As is evident from the discussion in the previous section, none of the existing
 hash table and skip list design proposals consider GPU memory oversubscription.
 As a first step toward enabling memory oversubscription in these data
-structures, we discuss UVM-based implementations of hash table and skip list
-that we use as the baseline for this work. We also point out the bottlenecks
-faced by these UVM-based data structure designs and why existing techniques that
-aim at optimizing UVM features fail to address them.
+structures, we discuss how to extend prior work for enabling oversubscription.
 
-\subsection{Hash Tables with UVM Support}
+\paragraph*{Hash Tables with UVM Support}
 
 Our hash table implementation extends WarpCore’s design [28] to support the
 UVM programming model. Henceforth, we will refer to our UVM-enabled baseline
@@ -402,6 +380,10 @@ We do not use any hints for the auxiliary value array.
 
 \subsection{Shortcomings of the Vanilla UVM Design}
 
+We also point out the bottlenecks
+faced by these UVM-based data structure designs and why existing techniques that
+aim at optimizing UVM features fail to address them.
+
 To study the baseline UVM designs, we evaluate how the insert() and search() kernels of the
 baseline hash table (HT-UVM) and the skip list (SL-UVM) scale with varying degrees of oversub-
 scription. Figures 6a and 6b show the performance result for an input sequence that has unique
@@ -468,7 +450,39 @@ and concurrent GPU data structures that require pointer chasing, have poor local
 prefetching counterproductive. Thus, it is imperative to come up with targeted novel data structure
 designs that can scale with the input size.
 
-\section{Problem Statement and Proposed Approach}
+\section{Relevant GPU Hashtables}
+
+As mentioned hashtables are data structures that stores key-value pairs. Now when two different keys collide for the same empty slot, hashtable provides two types of methods to solve this collision, which in turn divides hashtables in two broader classes: open addressing hashtable and closed
+addressing hashtable.
+Based on this two method, as far as our knowledge the most two relevant works are ~\cite{slabhash-ipdps-2020} and ~\cite{warpcore-hipc-2020}.
+Slabhash uses a closed addressing based collision resolution technique. It uses a Work Coperative Work Sharing(WCWS) strategy, where each warp gets a(a block of 32 threads working in lock step manner) gets each operation. They uses specialized nodes(called slabnodes) that stores 31 key-value pairs and a pointer to next node. They uses a special memory allocator called slab allocator, which allocates a new slabnode whenever necessary.
+
+\begin{figure}
+    \centering
+    \includegraphics[scale=0.7]{"./figs/slabhash.drawio.pdf"}
+    \caption{Slabhash layout}
+    \label{fig:slabhash-design}
+\end{figure}
+
+However, closed-addressing hash tables suffer from frequent random memory accesses. This behavior significantly degrades cache locality and renders hardware prefetching largely ineffective for large workloads. In particular, a key that would logically be placed in an adjacent slot may instead require the allocation of a new node located in a distant memory region, further exacerbating memory latency and performance variability.
+
+Accordingly, we adopt WarpCore as the baseline for our design, which employs open addressing as its collision-resolution strategy. Open addressing offers superior cache locality, making it particularly well suited to our approach, as hardware prefetchers can be leveraged effectively. WarpCore also employs the Warp-Cooperative Work Sharing (WCWS) strategy: if a thread within a warp fails to insert a key, another thread in the same warp that has identified an empty slot attempts the insertion. If all threads in the warp fail, each thread computes a secondary hash and collectively probes the next consecutive 32 slots in the hash table.
+
+Both the hashtable uses cooperative groups(cg) which is similar to a warp except now the warps becomes smaller with 2,4,8 or 16 threads(as specified in the program).
+
+\begin{figure}
+    \centering
+    \includegraphics[scale=0.7]{"./figs/WCWS.pdf"}
+    \caption{Warpcore layout}
+    \label{fig:warpcore-design}
+\end{figure}
+
+But all of this works develop in memory hashtable.
+
+\subsection{Manual Memory Management}
+
+For most of such problems, the best way currently in usage is to execute the huge input workload in multiple batches such that each workload fits within the GPU memory. For certain cases, where a system has multiple GPUs ~\cite{warpdrive} proposed a multi gpu hashtable that can use both the GPUs and in turn can handle large workloads. But this type of setup is not only expensive but will also run into the same problem for even larger workloads.
+
 
 Scaling HT-UVM and SL-UVM to high degrees of GPU memory oversubscription requires novel
 designs that take into consideration the potential lack of locality in the access pattern. In the
