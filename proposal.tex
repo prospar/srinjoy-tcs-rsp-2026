@@ -137,7 +137,7 @@ different operations like insert and search. The performance of a hash
 table depends on the memory layout, access pattern dictated by the input
 operation string, quality of the hash functions, and other design decisions
 like collision resolution and dynamic resizing techniques. Different
-approaches [25, 40] have been explored for CPUs over several decades and
+approaches~\cite{art-of-multiprocessor-programming-v2,hashtable-survey-cpu} have been explored for CPUs over several decades and
 many libraries provide efficient CPU implementations with different features
 (e.g., concurrent hash maps from \textsf{oneTBB}\footnote{\url{https://github.com/uxlfoundation/oneTBB}} and \textsf{Folly}\footnote{\url{https://github.com/facebook/folly}}).
 
@@ -156,24 +156,32 @@ memory divergence. The Warp-Cooperative Work-Sharing (WCWS) strategy,
 popularly followed by recent approaches~\cite{slabhash-ipdps-2020,warpcore-hipc-2020,warpdrive,gfsl-pact-2017,gpu-stadium-hashing}, tries to ameliorate
 branch and memory divergence by assigning an operation to a warp.
 
+\begin{figure}[ht]
+  \centering
+  \includegraphics[width=0.4\linewidth]{"./figs/slabhash.drawio.pdf"}
+  \caption{SlabHash layout with super-nodes; {\tt kv} denotes a (key, value) pair}
+    \label{fig:slabhash}
+\end{figure}
+
 \emph{SlabHash}~\cite{slabhash-ipdps-2020} uses closed addressing for conflict
 resolution. Unlike traditional linked lists, each bucket in SlabHash is
 organized as a list of super-nodes where each super-node consists of multiple
-key-value pairs including a pointer to the next node (Figure 1). A super-node is
-sized based on the warp size (e.g., 32 for NVIDIA GPUs). SlabHash requires a
-custom memory allocator to handle frequent and concurrent dynamic allocation of
-super-nodes to support resizing. \emph{DACHash}~\cite{dachash-sbacpad-2021}
-extends SlabHash to sort the input sequence for better access locality, and
-dynamically assigns work to either each thread or a warp based on the number of
-super-nodes in the relevant bucket. \emph{WarpCore}~\cite{warpcore-hipc-2020}
-proposes a static hash table, i.e., the table is not dynamically resized, and
-uses open addressing for resolving collisions. WarpCore assigns an operation on
-a (key, value) pair to one cooperative group, and all threads in a cooperative
-group participate to carry out the operation (e.g., performs a parallel probe to
-resolve conflicts). WarpCore may potentially suffer from high overheads in case
-there is a large proportion of negative queries (e.g., failed delete or
-search operations) at high load factors because it has to keep iterating
-through the hash table till it encounters an empty slot~\cite{bght}.
+key-value pairs including a pointer to the next node
+(Figure~\ref{fig:slabhash}). A super-node is sized based on the warp size (e.g.,
+32 for NVIDIA GPUs). SlabHash requires a custom memory allocator to handle
+frequent and concurrent dynamic allocation of super-nodes to support resizing.
+\emph{DACHash}~\cite{dachash-sbacpad-2021} extends SlabHash to sort the input
+sequence for better access locality, and dynamically assigns work to either each
+thread or a warp based on the number of super-nodes in the relevant bucket.
+\emph{WarpCore}~\cite{warpcore-hipc-2020} proposes a static hash table, i.e.,
+the table is not dynamically resized, and uses open addressing for resolving
+collisions. WarpCore assigns an operation on a (key, value) pair to one
+cooperative group, and all threads in a cooperative group participate to carry
+out the operation (\eg, performs a parallel probe to resolve conflicts).
+WarpCore may potentially suffer from high overheads in case there is a large
+proportion of negative queries (e.g., failed delete or search operations) at
+high load factors because it has to keep iterating through the hash table till
+it encounters an empty slot~\cite{bght}.
 
 \emph{DyCuckoo}~\cite{dycuckoo} divides the hash table array into d smaller
 tables of equal capacity and uses Cuckoo hashing~\cite{cuckoo-hashing} to lower
@@ -265,6 +273,7 @@ As mentioned hashtables are data structures that stores key-value pairs. Now whe
 addressing hashtable.
 Based on this two method, as far as our knowledge the most two relevant works are ~\cite{slabhash-ipdps-2020} and ~\cite{warpcore-hipc-2020}.
 Slabhash uses a closed addressing based collision resolution technique. It uses a Work Coperative Work Sharing(WCWS) strategy, where each warp gets a(a block of 32 threads working in lock step manner) gets each operation. They uses specialized nodes(called slabnodes) that stores 31 key-value pairs and a pointer to next node. They uses a special memory allocator called slab allocator, which allocates a new slabnode whenever necessary.
+
 \begin{figure}
     \centering
     \includegraphics[scale=0.7]{"./figs/slabhash.drawio.pdf"}

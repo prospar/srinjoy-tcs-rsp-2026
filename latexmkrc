@@ -31,8 +31,8 @@ $latex = 'env TEXINPUTS=".:$HOME/texmf//:$TEXINPUTS" pdflatex -synctex=1
 $aux_dir = './.'; # auxiliary files (aux, log, etc)
 $out_dir = './.';
 
-# Automatically detect the main file (any .tex in current dir if none given)
-@default_files = glob('*.tex');
+# Automatically detect the main file (any .tex in current dir if none given) with glob('*.tex').
+@default_files = ("paper");
 
 # If $bibtex_use is set to 0 or 1, bbl files are always treated as
 # non-regeneratable. If $bibtex_use is set to 1.5, bbl files are counted as
@@ -52,8 +52,8 @@ $out_dir = './.';
 # the value 1.5 does not work properly if the document uses biber instead of
 # bibtex.
 
-# Use 1 to run bibtex to regenerate .bbl file if needed.
-$bibtex_use = 0;
+# Run bibtex to regenerate .bbl file if needed.
+$bibtex_use = 1;
 $bibtex = 'bibtex %O %B';
 
 $view = 'pdf';
