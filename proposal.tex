@@ -8,6 +8,7 @@
 \usepackage[compact]{titlesec}
 \usepackage[a4paper,top=0.8in,left=0.8in,right=0.8in,bottom=0.8in]{geometry}
 \usepackage{cite}
+\usepackage{wrapfig}
 
 \usepackage{fancyhdr}  % use this package to get a 2 line header
 \pagestyle{fancy}
@@ -52,49 +53,64 @@ Indian Institute of Technology Kanpur, India,  \\
 \thispagestyle{fancy}
 
 \begin{abstract}
-    Efficient concurrent data structures are important building blocks for
-    accelerating applications on GPUs. With ever-increasing memory footprint of
-    GPU workloads, data structures used by kernels can exceed global memory
-    capacity. Using the unified virtual memory (UVM) model is a popular approach
-    for kernels to oversubscribe GPU memory without the need for explicit memory
-    management by a programmer. However, data structures executing with UVM can
-    suffer from performance degradation due to the high overheads associated with
-    data migration and thrashing under irregular access patterns.
+  Efficient concurrent data structures are important building blocks for
+  accelerating applications on GPUs. With ever-increasing memory footprint of
+  GPU workloads, data structures used by kernels can exceed global memory
+  capacity. Using the unified virtual memory (UVM) model is a popular approach
+  for kernels to oversubscribe GPU memory without the need for explicit memory
+  management by a programmer. However, data structures with irregular access
+  patterns suffer from performance degradation due to the high overheads
+  associated with data migration and thrashing when executing with UVM.
 
-    We propose to work on designing efficient GPU data structure to handle use
-    cases where the application working set oversubscribes GPU memory. In
-    particular, we will focus on the following data structures popularly used in
-    GPU kernels: hash table, skip list, and approximate membership filter. We have
-    profiled existing in-memory implementations of these data structures, and have
-    identified several bottlenecks. These data structures are characterized by
-    random accesses, and hence encounter frequent pages faults and unnecessary
-    data migrations between the CPU and the GPU with the UVM programming model. We
-    plan to explore alternate designs (\eg, hierarchical layout) for these data
-    structures to maximize access locality and hence improve performance. The
-    insight is that the outer-level containers enable efficient jumps to desired
-    regions of the data structure, while the inner containers allows operating on
-    the data. Our preliminary results show that our custom data structure designs
-    substantially improve performance over the optimized UVM baselines while
-    supporting high degree of GPU memory oversubscription for many inputs.
+  We propose to work on designing efficient GPU data structures to handle use
+  cases where the application working set oversubscribes GPU memory. In
+  particular, we will focus on the following data structures popularly used in
+  GPU kernels: hash table, skip list, and approximate membership filter. We have
+  profiled existing in-memory implementations of these data structures, and have
+  identified several bottlenecks. These data structures are characterized by
+  random accesses, and hence encounter frequent pages faults and unnecessary
+  data migrations between the CPU and the GPU with the UVM programming model.
+  Unlike traditional designs, we plan to explore alternate hierarchical memory
+  layouts for these data structures to maximize access locality and hence
+  improve performance. The insight is that the outer-level containers enable
+  efficient jumps to desired regions of the data structure, while the inner
+  containers allow operating on the data. Our preliminary results show that our
+  custom data structure designs have the potential to substantially improve
+  performance over the optimized UVM baselines while supporting high degree of
+  GPU memory oversubscription for many inputs.
 \end{abstract}
 
 \section*{Background and Motivation}
 
-The high compute capability and memory bandwidth of GPUs, coupled with energy efficiency, have spurred their usage across a diverse set of application domains including scientific computing simulations, big data and large-scale graph analytics, and computational biology~\cite{nvidia-applications}. Improved compute capabilities have led to a steady rise in the working set sizes of
-GPU-accelerated applications, which now often far exceed the GPU global memory capacity~\cite{dynamap,uvm-forest-isca25}.
-Hence, the traditional copy-then-execute (CTE) programming model is giving way to the newer unified virtual memory (UVM) paradigm, where the CPU virtual address space is also visible to GPU kernels. GPU vendors have introduced memory virtualization support through features such
-as unified virtual addressing, demand paging, and prefetching. UVM allows the host CPU and discrete GPU devices to share a unified virtual address space, enabling the GPU runtime to page memory in and out as needed~\cite{hum-ppopp-2020,dynamap}. Demand paging in UVM-capable GPUs facilitates
-transparent memory oversubscription, improving programmer productivity. The cost of servicing GPU page faults can be reduced by prefetching a chunk of nearby pages~\cite{cppe-ipdps-2020,uvmsmart-isca-2019,uvm-forest-isca25,hpe-tcad-2020}.
+\swarnendu{Add citations on GPU usage from NVIDIA MICRO'25 and GQF PPoPP'23 papers.}
+
+The high compute capability and memory bandwidth of GPUs, coupled with energy
+efficiency, have spurred their usage across a diverse set of application domains
+including scientific computing simulations, big data and large-scale graph
+analytics, and computational biology~\cite{nvidia-applications, tensorflow-2015, metacache-icpp-2021}.
+Furthermore, improved compute capabilities have led to a steady rise in the
+working set sizes of GPU-accelerated applications, which now often far exceed
+the GPU global memory capacity~\cite{dynamap,uvm-forest-isca25}. Hence, the
+traditional copy-then-execute (CTE) programming model is giving way to the newer
+unified virtual memory (UVM) paradigm, where the CPU virtual address space is
+also visible to GPU kernels. GPU vendors have introduced memory virtualization
+support through features such as unified virtual addressing, demand paging, and
+prefetching. UVM allows the host CPU and discrete GPU devices to share a unified
+virtual address space, enabling the GPU runtime to page memory in and out as
+needed~\cite{hum-ppopp-2020,dynamap}. Demand paging in UVM-capable GPUs
+facilitates transparent memory oversubscription, improving programmer
+productivity. The cost of servicing GPU page faults can be reduced by
+prefetching a chunk of nearby
+pages~\cite{cppe-ipdps-2020,uvmsmart-isca-2019,uvm-forest-isca25,hpe-tcad-2020}.
 
 Writing correct but scalable multithreaded GPU kernels is a difficult art~\cite{massively-parallel-processors,kernelbench-arxiv}. In addition to the algorithm and the compute capabilities of the GPU device, the scalability of the application depends on the building blocks of the kernel, \eg, GPU data structures. For example, the performance of the Pinterest application improved substantially by switching to GPU-accelerated hash tables~\cite{pinterest-perf-boost}. Therefore, the design of sophisticated GPU data structures such as lists and trees is an active area of research~\cite{gpu-gems2}. Much recent work has focused on designing efficient data structures (\eg, hash tables, skip lists, B-trees, and membership query filters) for use in device code~\cite{slabhash-ipdps-2020,dachash-sbacpad-2021,warpcore-hipc-2020,warpdrive,parallel-hashmap-nvidia,survey-hashing-tpds-2020,bght,dycuckoo,gph-pamd-2025,gfsl-pact-2017,cmedia-skiplist-ipdpsw-2019,skiplist-survey-2025,multiversion-btree,gpu-filters-ppopp23,harmonia-gpu,gpu-btree,gpu-gelhash,survey-hashing-tpds-2020,lockfree-ds-icpads-2012,quotient-filter,stdgpu,cucollections-nvidia,gpu-cds}.
 
 \paragraph*{The Problem}
 
-The steady increase in the working set size and irregular access patterns of GPU applications require more efficient memory management so that the GPU data structures efficiently scale with the input size. However, existing studies primarily focus on the traditional CTE model (\ie, in-memory data structures) and do not address how to design efficient data structures that oversubscribe memory, and developers fall back to UVM. While UVM simplifies programming, its performance remains a significant concern due to frequent far faults
-\footnote{Far faults, which occur when a requested page is absent in GPU global memory, require multiple PCIe roundtrips, and are resolved after interacting with the CPU page tables. On \NVIDIA GPUs, a far fault from a CUDA thread stalls the progress of the warp, possibly affecting the overall GPU throughput.},
+The steady increase in the working set size and irregular access patterns of GPU applications require more efficient memory management so that the GPU data structures efficiently scale with the input size. However, existing studies primarily focus on the traditional CTE model (\ie, in-memory data structures) and do not address how to design efficient data structures that oversubscribe memory, and developers fall back to UVM. While UVM simplifies programming, its performance remains a significant concern due to frequent far faults\footnote{Far faults, which occur when a requested page is absent in GPU global memory, require multiple PCIe roundtrips, and are resolved after interacting with the CPU page tables. On \NVIDIA GPUs, a far fault from a CUDA thread stalls the progress of the warp, possibly affecting the overall GPU throughput.},
 high address translation overheads, and high volume of page replacement~\cite{suv-micro-2024,in-depth-analysis-uvm-sc21,fine-grain-quantitative-uvm-taco24,batch-aware-asplos-2020,uvmsmart-isca-2019,cppe-ipdps-2020,irregular-page-walks-isca-2018,heterogeneous-uvm,uvm-forest-isca25,dynamap,uvmbench-arxiv}. For instance, Lin et al.~\cite{oversubscription-dl-training} find UVM-based implementations competitive with the CTE model for workloads that fit in GPU memory, but about $7\times$ slower with oversubscription. The performance degradation with UVM is more prominent in applications with irregular access patterns and pointer chasing~\cite{fine-grain-quantitative-uvm-taco24,demystifying-uvm-cost-ipdps2021,in-depth-analysis-uvm-sc21}.
 
-Hash tables is a popular concurrent data structures for storing key-value
+Hash table is a popular concurrent data structures for storing key-value
 pairs~\cite{art-of-multiprocessor-programming}. Hash tables are widely used in
 various scientific applications like metagenomic
 sequencing~\cite{metacache-icpp-2021}, photodna~\cite{photodna-ares-2023}, and
@@ -109,21 +125,24 @@ memory~\cite{listdb-osdi-2022,phast-tpds-2022}, concurrency
 control~\cite{kiwi-ppopp-2017,nitro-vldbe-2016,jellyfish-middleware-2020}, and
 for representing skewed data access
 patterns~\cite{biased-skiplist-algorithm-2001,biased-skiplist-algorithmica-2005}.
+Approximate membership query (AMQ) filters are data structures that maintain a space-optimized approximate representation of a set or a multiset~\cite{gpu-filters-ppopp23}.
+AMQ filters are popularly used in databases, networks, and file systems, where there is a substantial benefit by quickly filtering negative queries. AMQs allow queries to occasionally return a false positive. 
 
 Data structures like hash tables, skip lists, and AMQs are characterized by input-dependent access locality~\cite{art-of-multiprocessor-programming-v2}.
 % As a result,
-Lack of locality in the input operation strings and sub-optimal implementation
+Lack of locality in the input operation strings and suboptimal implementation
 choices can lead to irregular access patterns and poor data locality. When
 memory oversubscription is coupled with these performance pathologies, these
-data structures exhibit very poor scalability. In this proposal, we establish
-that UVM-based implementations of popular random-access data structures with GPU
-memory oversubscription do not scale well with input size even when these
-implementations are meticulously optimized using data usage hints and prefetches
-based on memory/translation usage~\cite{nvidia-prefetching}. We observe that the
+data structures can exhibit very poor scalability. In this proposal, we aim to
+establish that UVM-based implementations of popular random-access data
+structures with GPU memory oversubscription do not scale well with input size
+even when these implementations are meticulously optimized using data usage
+hints and prefetches based on memory/translation
+usage~\cite{nvidia-prefetching}. Our initial set of experiments show that the
 run times of these implementations increase exponentially with a linear increase
-in the input sizes indicating a clear \emph{performance bottleneck}. We squarely
-focus on alleviating this performance pathology by proposing efficient designs
-of concurrent data structures for GPUs.
+in the input sizes indicating a clear \emph{performance bottleneck}. We focus on
+alleviating this performance pathology by proposing efficient designs of
+concurrent data structures for GPUs.
 
 \section*{Brief Literature Review}
 
@@ -156,12 +175,12 @@ memory divergence. The Warp-Cooperative Work-Sharing (WCWS) strategy,
 popularly followed by recent approaches~\cite{slabhash-ipdps-2020,warpcore-hipc-2020,warpdrive,gfsl-pact-2017,gpu-stadium-hashing}, tries to ameliorate
 branch and memory divergence by assigning an operation to a warp.
 
-\begin{figure}[ht]
+\begin{wrapfigure}{r}{0.6\textwidth}
   \centering
-  \includegraphics[width=0.4\linewidth]{"./figs/slabhash.drawio.pdf"}
+  \includegraphics[width=0.85\linewidth]{"./figs/slabhash.drawio.pdf"}
   \caption{SlabHash layout with super-nodes; {\tt kv} denotes a (key, value) pair}
     \label{fig:slabhash}
-\end{figure}
+\end{wrapfigure}
 
 \emph{SlabHash}~\cite{slabhash-ipdps-2020} uses closed addressing for conflict
 resolution. Unlike traditional linked lists, each bucket in SlabHash is
@@ -173,6 +192,7 @@ frequent and concurrent dynamic allocation of super-nodes to support resizing.
 \emph{DACHash}~\cite{dachash-sbacpad-2021} extends SlabHash to sort the input
 sequence for better access locality, and dynamically assigns work to either each
 thread or a warp based on the number of super-nodes in the relevant bucket.
+
 \emph{WarpCore}~\cite{warpcore-hipc-2020} proposes a static hash table, i.e.,
 the table is not dynamically resized, and uses open addressing for resolving
 collisions. WarpCore assigns an operation on a (key, value) pair to one
@@ -183,29 +203,29 @@ proportion of negative queries (e.g., failed delete or search operations) at
 high load factors because it has to keep iterating through the hash table till
 it encounters an empty slot~\cite{bght}.
 
-\emph{DyCuckoo}~\cite{dycuckoo} divides the hash table array into d smaller
-tables of equal capacity and uses Cuckoo hashing~\cite{cuckoo-hashing} to lower
-the cost of rehashing when the table is resized.
-% The hash table is downsized or upsized if the load factor crosses respective
-% thresholds. Thus, DyCuckoo improves the amortized cost of hash table
-% operations that includes negative queries and dynamic resizing.
-GPH~\cite{gph-pamd-2025} improves the performance of searches by adapting a
-perfect hashing scheme. It uses a cost model to gauge the performance of the
-hash table based on the occupancy, number of instructions executed, and the
-cycles per instruction. GPH divides the hash table into $n$ contiguous buckets,
-and maintains an auxiliary array in per-SM shared memory to store the mapping
-and offset for each bucket. GPH uses three hash functions to calculate the
-destination bucket for a key $k$.
-% The first hash function maps the key to an auxiliary array index I . The
-% second hash function calculates the virtual bucket ID v using the mapping
-% stored at index I and key k. The third hash function computes the destination
-% bucket.
-The auxiliary array allows GPH to perform insert and search operations with a
-fixed number of probes.
+% \emph{DyCuckoo}~\cite{dycuckoo} divides the hash table array into d smaller
+% tables of equal capacity and uses Cuckoo hashing~\cite{cuckoo-hashing} to lower
+% the cost of rehashing when the table is resized.
+% % The hash table is downsized or upsized if the load factor crosses respective
+% % thresholds. Thus, DyCuckoo improves the amortized cost of hash table
+% % operations that includes negative queries and dynamic resizing.
+% GPH~\cite{gph-pamd-2025} improves the performance of searches by adapting a
+% perfect hashing scheme. It uses a cost model to gauge the performance of the
+% hash table based on the occupancy, number of instructions executed, and the
+% cycles per instruction. GPH divides the hash table into $n$ contiguous buckets,
+% and maintains an auxiliary array in per-SM shared memory to store the mapping
+% and offset for each bucket. GPH uses three hash functions to calculate the
+% destination bucket for a key $k$.
+% % The first hash function maps the key to an auxiliary array index I . The
+% % second hash function calculates the virtual bucket ID v using the mapping
+% % stored at index I and key k. The third hash function computes the destination
+% % bucket.
+% The auxiliary array allows GPH to perform insert and search operations with a
+% fixed number of probes.
 
 \begin{figure}[t]
     \centering
-    \includegraphics[width=0.8\columnwidth]{"./figs/basic-skiplist-design-simplified.drawio.pdf"}
+    \includegraphics[width=0.7\columnwidth]{"./figs/basic-skiplist-design-simplified.drawio.pdf"}
     \caption{Layout of a traditional skip list. The data layer shows the keys in stored in the skip list. The dotted bold black line shows the sequence of pointers traversed while searching for the key 11.}
     \label{fig:skiplist-design}
 \end{figure}
@@ -214,9 +234,11 @@ fixed number of probes.
 
 A skip list~\cite{skiplist-cacm-1990} is a probabilistic data structure that
 allows efficient insertion, deletion, and search operations on sorted linked
-lists. Rebalancing height-balanced trees is challenging while supporting
-concurrent operations, and hence skip lists are used as a simpler alternative to
-a deterministically balanced tree. A skip list is organized as a hierarchy of
+lists.
+% Rebalancing height-balanced trees is challenging while supporting
+% concurrent operations, and hence skip lists are used as a simpler alternative to
+% a deterministically balanced tree.
+A skip list is organized as a hierarchy of
 linked lists, where higher-level lists are always contained in lower-level
 lists. The list at the lowest level ($L_{0}$) contains the data elements in a
 sorted order. We refer to the lowest level $L_{0}$ as the data layer, and the
@@ -253,14 +275,14 @@ size of a warp (\ie, $N + 2$ is 32).
 
 \begin{figure}[ht]
     \centering
-    \includegraphics[width=\columnwidth]{"./figs/gfsl-node-overview1.drawio.pdf"}
+    \includegraphics[width=0.9\columnwidth]{"./figs/gfsl-node-overview1.drawio.pdf"}
     \caption{Super-nodes in index and data layers in GFSL}
     \label{fig:gfsl-node}
 \end{figure}
 
 \begin{figure}[ht]
     \centering
-    \includegraphics[width=0.9\columnwidth]{"./figs/gfsl-design-overview-sb.drawio.pdf"}
+    \includegraphics[width=0.8\columnwidth]{"./figs/gfsl-design-overview-sb.drawio.pdf"}
     \caption{GFSL with two keys per super-node
       % and search of key 11
     }
@@ -273,10 +295,10 @@ size of a warp (\ie, $N + 2$ is 32).
   to explore efficient data structure designs for popular GPU data structures such as hash tables, skip lists, and AMQs with oversubscription.
 
   \begin{itemize}
-    \item Extend existing in-memory designs to work with oversubscription,
-    \item Show limitations in using only \nvidia-provided APIs for managing data movement for designing UVM-enabled data structures,
-    \item Propose new designs for popular GPU data structures such as the hash table, skip list, and AMQ,
-    \item Validate the efficiency of our new designs by integrating our implementations in real-world applications.
+    \item Extend existing in-memory designs to work with oversubscription (\eg, allocate managed memory with \code{cudaMallocManaged()} and avoid explicit memory copies),
+    \item Show limitations in using \nvidia-provided APIs like \code{cudaMemAdvise()} and \code{cudaMemPrefetchAsync()} for managing data movement for designing UVM-enabled data structures,
+    \item Propose new designs for three popular GPU data structures: hash table, skip list, and AMQ,
+    \item Validate the efficiency of our new designs by integrating our implementations in real-world applications~\cite{metacache-icpp-2021}.\footnote{\url{https://github.com/funatiq/cuclark}}
   \end{itemize}
 
   We expand each objective in more detail in the following.
@@ -449,35 +471,6 @@ memory [3, 5, 19, 67, 68]. Applications with irregular access patterns, e.g., gr
 and concurrent GPU data structures that require pointer chasing, have poor locality, making
 prefetching counterproductive. Thus, it is imperative to come up with targeted novel data structure
 designs that can scale with the input size.
-
-\section{Relevant GPU Hashtables}
-
-As mentioned hashtables are data structures that stores key-value pairs. Now when two different keys collide for the same empty slot, hashtable provides two types of methods to solve this collision, which in turn divides hashtables in two broader classes: open addressing hashtable and closed
-addressing hashtable.
-Based on this two method, as far as our knowledge the most two relevant works are ~\cite{slabhash-ipdps-2020} and ~\cite{warpcore-hipc-2020}.
-Slabhash uses a closed addressing based collision resolution technique. It uses a Work Coperative Work Sharing(WCWS) strategy, where each warp gets a(a block of 32 threads working in lock step manner) gets each operation. They uses specialized nodes(called slabnodes) that stores 31 key-value pairs and a pointer to next node. They uses a special memory allocator called slab allocator, which allocates a new slabnode whenever necessary.
-
-\begin{figure}
-    \centering
-    \includegraphics[scale=0.7]{"./figs/slabhash.drawio.pdf"}
-    \caption{Slabhash layout}
-    \label{fig:slabhash-design}
-\end{figure}
-
-However, closed-addressing hash tables suffer from frequent random memory accesses. This behavior significantly degrades cache locality and renders hardware prefetching largely ineffective for large workloads. In particular, a key that would logically be placed in an adjacent slot may instead require the allocation of a new node located in a distant memory region, further exacerbating memory latency and performance variability.
-
-Accordingly, we adopt WarpCore as the baseline for our design, which employs open addressing as its collision-resolution strategy. Open addressing offers superior cache locality, making it particularly well suited to our approach, as hardware prefetchers can be leveraged effectively. WarpCore also employs the Warp-Cooperative Work Sharing (WCWS) strategy: if a thread within a warp fails to insert a key, another thread in the same warp that has identified an empty slot attempts the insertion. If all threads in the warp fail, each thread computes a secondary hash and collectively probes the next consecutive 32 slots in the hash table.
-
-Both the hashtable uses cooperative groups(cg) which is similar to a warp except now the warps becomes smaller with 2,4,8 or 16 threads(as specified in the program).
-
-\begin{figure}
-    \centering
-    \includegraphics[scale=0.7]{"./figs/WCWS.pdf"}
-    \caption{Warpcore layout}
-    \label{fig:warpcore-design}
-\end{figure}
-
-But all of this works develop in memory hashtable.
 
 \subsection{Manual Memory Management}
 
