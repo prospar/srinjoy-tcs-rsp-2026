@@ -9,6 +9,7 @@
 \usepackage[a4paper,top=0.8in,left=0.8in,right=0.8in,bottom=0.8in]{geometry}
 \usepackage{cite}
 \usepackage{wrapfig}
+\usepackage{subcaption}
 
 \usepackage{fancyhdr}  % use this package to get a 2 line header
 \pagestyle{fancy}
@@ -338,10 +339,10 @@ UVM-enabled baseline hash table design as \htuvm.
 \Htuvm's hash table is static, similar to WarpCore. A limitation of a static
 design is that it requires an estimate of the maximum number of insert
 operations to avoid expensive resizing at run time. Hence, \htuvm conservatively
-allocates an array of size \code{$\lceil (NUM\_INS\_OPS/LOAD\_FACTOR) \rceil$}
+allocates an array of size \code{$\lceil \mathtt{(NUM\_INS/LF)} \rceil$}
 in global memory using managed memory allocation of CUDA, where
-\code{NUM\_INS\_OPS} is the number of insert operations to be performed on the
-hash table and \code{LOAD\_FACTOR} indicates the fraction of filled entries.
+\code{NUM\_INS} is the number of insert operations to be performed on the
+hash table and \code{LF} indicates the fraction of filled entries.
 \Htuvm implements three kernels: \code{insert()}, \code{delete()}, and
 \code{search()}. In addition to a pointer to the hash table in GPU global memory
 and an array of input keys to be operated on, each kernel takes additional
@@ -358,7 +359,7 @@ To enable a vanilla UVM support, we will incorporate managed memory allocation
 for the hash table array, i.e., replaced calls to \code{cudaMalloc()} and
 \code{cudaMemcpy()} with \code{cudaMallocManaged()}. Our initial experiments
 show that the vanilla UVM implementation described thus far performs very poorly
-with more than 50\% oversubscription. A general good-quality hash function 
+with more than 50\% oversubscription. A general good-quality hash function
 distributes the memory accesses across different buckets, which leads to
 touching random pages depending on the input key pattern. Oversubscription
 further leads to many pages storing hash table data to get evicted (based on
@@ -367,12 +368,88 @@ This gives rise to frequent far faults. Far faults are expensive because they
 incur overheads of page unmapping on the CPU, page migration to the GPU, and
 installing page table entries in the GPU. Multiple concurrent warps (or CGs)
 stall waiting for their respective far faults to be resolved, thereby hurting
-performance [58, 59]. For example, in our experiments (details discussed in
-later sections), the insert() kernel does not finish within even 24 hours with
-100% oversubscription5 on a GPU with
-16 GB memory. We optimize the data movement in the vanilla UVM implementation by
+performance~\cite{irregular-page-walks-isca-2018,neighborhood-aware-addr-translation-micro-2018}.
+For example, in our initial experiments, the \code{insert()} kernel does not
+finish within even 24 hours with 100\% oversubscription5 on a GPU with 16 GB
+memory.
+
+\paragraph*{Skip Lists with UVM Support}
+
+We will use the GFSL algorithm~\cite{gfsl-pact-2017} as the baseline to enable
+oversubscribing GPU memory. The implementation will support \code{insert()}, \code{delete()}, \code{findPredecessor()}, and \code{search()} operations, similar to existing skip list implementations. 
+
+To enable a vanilla UVM support, we will need to make similar changes to the
+hash table data structure. We will incorporate managed memory allocation for the
+super-nodes in GFSL. We will also experiment with the memory advise and
+prefetching hints.
+
+\subsection*{Shortcomings of the Vanilla UVM Design}
+
+\begin{wrapfigure}{r}{0.5\textwidth}
+    \centering
+        \includegraphics[scale=0.35]{"./figs/Insert_Search_Motivation_w_hints.pdf"}
+        \caption{Scaling of \htuvm}
+        \label{fig:ht-uvm-perf-motivation}
+\end{wrapfigure}
+
+We are currently performing experiments to evaluate the performance of a \naive
+UVM implementation, and identify potential performance bottlenecks. To study the
+baseline UVM designs, we evaluate how the \code{insert()} and \code{search()}
+kernels of \htuvm scale with varying degrees of oversubscription.
+Figure~\ref{fig:ht-uvm-perf-motivation} shows the performance of \htuvm for two
+input sequences, \textsf{SU} and \textsf{MI}. \textsf{SU} represents an input
+trace that has unique keys distributed over the allowed range of 32-bit keys.
+\textsf{MI} represents a monotonically increasing sequence of input keys without
+repetition. The x-axis shows the length of the input key sequence that is
+operated on, with 2e9 keys roughly saturating the GPU global memory. Beyond 2e9 keys, the GPU memory is oversubscribed for \htuvm and 100\% oversubscription is reached with 4e9 keys (ignoring the auxiliary value array).
+
+Figure~\ref{fig:ht-uvm-perf-motivation} shows that the run time of the
+\code{insert()} kernel increases steeply once the working set starts
+oversubscribing the GPU memory. The run time of the \code{search()} kernel, on
+the other hand, scales relatively slowly, but continues to exhibit a
+faster-than-linear growth beyond 2e9 keys. The primary reason for poor
+scalability of \htuvm is the lack of any locality in the input key pattern
+leading to accesses going to distant parts of the data structure within a short
+time window. With oversubscription, this increases the possibility of the
+requested page being not resident in the GPU memory hierarchy, leading to
+frequent far faults.
+
+\subsection*{Designing Oversubscribed Data Structures}
+
+Existing techniques, such as prefetching and page replacement policies, optimize
+memory usage, but often fail to be effective when applications with irregular
+access patterns oversubscribe GPU
+memory~\cite{uvm-forest-isca25,uvmsmart-isca-2019,cppe-ipdps-2020,hpe-tcad-2020}.
+Applications with irregular access patterns, e.g., graph-based applications and
+concurrent GPU data structures that require pointer chasing, have poor locality,
+making prefetching counterproductive. Thus, it is imperative to come up with
+targeted novel data structure designs that can scale with the input size.
+
+Scaling applications (\ie, concurrent GPU data structures) to high degrees of
+GPU memory oversubscription requires novel designs that take into consideration
+the potential lack of locality in the access pattern. The key insights for
+minimizing page faults are to (i) group nearby keys in the input sequence to
+enhance the locality of the input, and (ii) translate the locality, if any,
+present in the input sequence to the hash table architecture. The first
+requirement ensures that keys within the same page are processed together (i.e.,
+near in time) leveraging spatial locality. The second requirement implies that
+the nearby keys map to nearby memory pages of the hash table. This is, in
+general, challenging because a general hash function may end up mapping even
+consecutive keys to far apart pages. Taken together, the aforementioned two
+requirements optimize memory access pattern and facilitate efficient
+prefetching, which, in turn, reduces the frequency of on-demand page faults and
+subsequent stalls during operations improving overall performance In this
+proposal, we will explore possible designs of hash tables, skip lists, and AMQ
+filters that scale with input size.
+
+\section{Ongoing Work}
+
+We have designed UVM-based implementation of hash tables with modified structures that performes well even with memory oversubscription. We compared our design with the existing state-of-the-art hashtables like cucollections\href{https://github.com/NVIDIA/cuCollections/tree/dev} and ~\cite{warpcore-hipc-2020}. For valid comparison, we update this models to support memory oversubscription and we observe that they suffer greatly because of far faults. So we designed our hashtable such that these far faults are reduced.
+Our current work is currently under submission in a reputed conference.
+
+We optimize the data movement in the vanilla UVM implementation by
 incorporating different combinations of memory advise and asynchronous prefetch
-hints [51]. The best hint combina- tion found through empirical evaluation turns
+hints [51]. The best hint combination found through empirical evaluation turns
 out to be cudaMemAdviseSetAccessedBy for the hash table array, and both
 cudaMemAdviseSetAccessedBy and cudaMemPrefetchAsync for the input array
 containing keys to be operated on as well as the auxiliary array of values used
@@ -394,59 +471,6 @@ intrinsics to find an empty slot to insert the key and the value. In case of a
 duplicate, the value of that key is updated. For search, similar lookup logic
 like insert is followed, but instead of a atomic instruction to insert a key,
 search just returns the value associated to the particular key.
-
-\subsection{Skip Lists with UVM Support}
-
-We extend the GFSL [44] algorithm with UVM support to enable oversubscribing GPU memory. We
-refer to this UVM-enabled skip list design as SL-UVM. SL-UVM supports insert(), delete(), and
-search() operations, similar to HT-UVM. In the following, we first briefly describe the important
-operations of SL-UVM, based on the GFSL proposal. Next, we discuss how we enable a vanilla
-UVM support on top of GFSL.
-
-UVM Support. To enable a vanilla UVM support, we incorporate managed memory allocation for
-the super-nodes of GFSL. We also experiment with the memory advise and prefetching hints, and
-find that only prefetch hints are useful for the super-nodes of SL-UVM and the input key array.
-We do not use any hints for the auxiliary value array.
-
-\subsection{Shortcomings of the Vanilla UVM Design}
-
-We also point out the bottlenecks
-faced by these UVM-based data structure designs and why existing techniques that
-aim at optimizing UVM features fail to address them.
-
-To study the baseline UVM designs, we evaluate how the insert() and search() kernels of the
-baseline hash table (HT-UVM) and the skip list (SL-UVM) scale with varying degrees of oversub-
-scription. Figures 6a and 6b show the performance result for an input sequence that has unique
-keys randomly distributed over the allowed range of 32-bit keys (such an input will be referred to
-as a sparse unique input). The x-axis shows the length of the input key sequence that is operated
-on, with 2e9 and 1.25e9 keys roughly saturating the GPU global memory for the HT-UVM and
-SL-UVM designs respectively. Beyond 2e9 keys, the GPU memory is oversubscribed for HT-UVM
-and the 100% oversubscription point is reached with 4e9 keys (ignoring the auxiliary value array).
-On the other hand, for SL-UVM, the GPU memory is oversubscribed beyond 1.25e9 keys and the
-100% oversubscription point is reached with 2.5e9 keys. In general, for the same input size, SL-UVM
-has a bigger memory footprint from maintaining the down pointers between the skip list levels.
-
-Figure 6a shows that the run time of the insert() kernel for HT-UVM increases steeply once the
-working set starts oversubscribing the GPU memory. The run time of the search() kernel, on the
-other hand, scales relatively slowly, but continues to exhibit a faster-than-linear growth beyond
-2e9 keys. Figure 6b shows a similar trend for SL-UVM with search() being more expensive than
-insert() up to 2e9 keys, beyond which point the insert() kernel ends up spending most of its time
-waiting for far faults to resolve and fails to complete within 72 hours, which we set as a time-out
-limit for all of our experiments with skip lists. This is indicated by a ‘×’ for the insert() kernel
-when input lengths are 2.25e9 and 2.5e9. Importantly, the difficulty of scaling a skip list is also
-reflected in the timescale of the y-axis of Figure 6b which is in hours compared to that in seconds
-for the hash table.
-The difference between the insert() and search() kernels are that the latter works on a pre-built
-data structure. The search() kernel is slower than the insert() kernel for the skip list (Figure 6b)
-because it operates on a prebuilt skip list and has potentially poorer locality compared to inserts.
-With oversubscription, the search() kernel suffer from poor locality from the very beginning
-because the search key could lie anywhere in the skip list, while the insert() kernel enjoys
-comparatively better locality and does not encounter far faults until the skip list starts overflowing
-GPU memory.
-The primary reason for poor scalability of HT-UVM and SL-UVM is the lack of any locality in
-the input key pattern leading to accesses going to distant parts of the data structure within a short
-time window. With oversubscription, this increases the possibility of the requested page being not
-resident in the GPU memory hierarchy, leading to frequent far faults.
 
 To further study the impact of memory advise hints on the page fault volume, we evaluate the
 insert() kernel of HT-UVM with and without these hints using an input sequence that completes
@@ -473,39 +497,13 @@ page fault serving in certain situations. Thus, the optimal memory advise hints 
 may depend on the input pattern as well as the input sequence length, adding an extra layer of
 complexity for the programmer and static program analyses [10].
 
-Existing techniques, such as prefetching and page replacement policies, optimize memory usage,
-but often fail to be effective when applications with irregular access patterns oversubscribe GPU
-memory [3, 5, 19, 67, 68]. Applications with irregular access patterns, e.g., graph-based applications
-and concurrent GPU data structures that require pointer chasing, have poor locality, making
-prefetching counterproductive. Thus, it is imperative to come up with targeted novel data structure
-designs that can scale with the input size.
 
-\subsection{Manual Memory Management}
 
 For most of such problems, the best way currently in usage is to execute the huge input workload in multiple batches such that each workload fits within the GPU memory. For certain cases, where a system has multiple GPUs ~\cite{warpdrive} proposed a multi gpu hashtable that can use both the GPUs and in turn can handle large workloads. But this type of setup is not only expensive but will also run into the same problem for even larger workloads.
 
-
-Scaling HT-UVM and SL-UVM to high degrees of GPU memory oversubscription requires novel
-designs that take into consideration the potential lack of locality in the access pattern. In the
-following, we discuss the design of a hash table and a skip list that scales better with input size.
-
-
-We have designed UVM-based implementation of hash tables with modified structures that performes well even with memory oversubscription. We compared our design with the existing state-of-the-art hashtables like cucollections\href{https://github.com/NVIDIA/cuCollections/tree/dev} and ~\cite{warpcore-hipc-2020}. For valid comparison, we update this models to support memory oversubscription and we observe that they suffer greatly because of far faults. So we designed our hashtable such that these far faults are reduced.
-Our current work is currently under submission in a reputed conference.
-
-\subsection{Designing Oversubscribed Data Structures}
-
-The key insights for minimizing page faults are to (i) group nearby keys in the input sequence
-to enhance the locality of the input, and (ii) translate the locality, if any, present in the input
-sequence to the hash table architecture. The first requirement ensures that keys within the same
-page are processed together (i.e., near in time) leveraging spatial locality. The second requirement
-implies that the nearby keys map to nearby memory pages of the hash table. This is, in general,
-challenging because a general hash function may end up mapping even consecutive keys to far
-apart pages. Taken together, the aforementioned two requirements optimize memory access pattern
-and facilitate efficient prefetching, which, in turn, reduces the frequency of on-demand page faults
-and subsequent stalls during operations improving overall performance
-
-\section{Ongoing Work}
+We also point out the bottlenecks
+faced by these UVM-based data structure designs and why existing techniques that
+aim at optimizing UVM features fail to address them.
 
 We are planning on extending this idea to amq ie, designing a amq that doesn't suffer a huge performance overhead for memory oversubscription. We are
 also planning on improving the algorithms of the current state-of-the-art amqs such that they receive a substantial performance boost.
