@@ -39,6 +39,20 @@
   pdftitle={}, pdfauthor={Swarnendu Biswas}, pdfsubject={}
 }
 
+\newcommand{\htuvm}{\textsf{HT-UVM}\xspace}
+\newcommand{\Htuvm}{\textsf{HT-UVM}\xspace}
+
+\newcommand{\htovs}{\textsf{HT-OVS}\xspace}
+\newcommand{\Htovs}{\textsf{HT-OVS}\xspace}
+
+\newcommand{\skipuvm}{\textsf{SL-UVM}\xspace}
+\newcommand{\Skipuvm}{\textsf{SL-UVM}\xspace}
+
+\newcommand{\skipovs}{\textsf{SL-OVS}\xspace}
+\newcommand{\Skipovs}{\textsf{SL-OVS}\xspace}
+
+\newcommand{\heterosl}{\textsf{SL-OVS}\xspace}
+
 \setlength{\droptitle}{-2cm}
 \title{Designing Efficient GPU Data Structures for Oversubscription}
 \author{Srinjoy Sarkar \\
@@ -305,87 +319,81 @@ size of a warp (\ie, $N + 2$ is 32).
   
 \subsection*{Extending Existing Designs for UVM}
 
-As is evident from the discussion in the previous section, none of the existing
-hash table and skip list design proposals consider GPU memory oversubscription.
-As a first step toward enabling memory oversubscription in these data
-structures, we discuss how to extend prior work for enabling oversubscription.
+To the best of knowledge, none of the existing approaches for GPU data structures, including libraries~\cite{cucollections-nvidia} from \nvidia, 
+%hash table and skip list design proposals
+consider GPU memory oversubscription.
+The first nontrivial step is to extend prior work for enabling oversubscription.
 
-\paragraph*{Hash Tables with UVM Support}
+\paragraph*{Hash Table with UVM Support}
 
-Our hash table implementation extends WarpCore’s design [28] to support the
-UVM programming model. Henceforth, we will refer to our UVM-enabled baseline
-hash table design as HT-UVM. HT-UVM’s hash table is static, similar to
-WarpCore. A limitation of a static design is that it requires an estimate of
-the maximum number of insert operations to avoid expensive resizing at run
-time. Hence, HT-UVM conservatively allocates an array of size
-$\lceil (NUM\_INS\_OPS/LOAD\_FACTOR) \rceil$ in global memory using managed memory allocation
-of CUDA, where NUM\_INS\_OPS is the number of insert operations to be
-performed on the hash table and LOAD\_FACTOR indicates the fraction of filled
-entries. HT-UVM implements three kernels: insert(), delete(), and search().
-In addition to a pointer to the hash table in GPU global memory and an array
-of input keys to be operated on, each kernel takes additional arguments. The
-insert() kernel also takes as input an auxiliary array of values
-corresponding to the input keys that are to be inserted, while the delete()
-and search() kernels pass an output array as parameter which tracks the
-values (corresponding to the input keys) that were operated on. The
-operations in HT-UVM can be invoked both for a single key or for a batch of
-keys; the latter will avoid the overhead of repeated kernel launches. HT-UVM
-assigns each operation to a cooperative group (CG) which is commonly
-referred to as warp-cooperative work scheduling (WCWS), and has been used in
-prior work [6, 28].
+Unlike WarpCore which uses open-addressing for resolving collisions,
+closed-chaining-based designs (\eg, SlabHash~\cite{slabhash-ipdps-2020}) are
+sensitive to the memory allocator and requires nontrivial extensions.
+Furthermore, probing the hash table array with open-addressing has potentially
+better data locality compared to closed-chaining~\cite{warpcore-hipc-2020}.
+Hence, we have decided to use WarpCore~\cite{warpcore-hipc-2020} as the baseline
+to support the UVM programming model. Henceforth, we will refer to our
+UVM-enabled baseline hash table design as \htuvm.
 
-Collision Resolution. HT-UVM uses open addressing with double hashing for
-collision resolution because it can avoid the problem of clustering. Figure
-5 shows how collisions are detected and resolved. The figure shows a CG
-having four threads attempting to insert a key x with value y. Suppose the
-key x hashes to a slot denoted by h 1 (x) in the figure, but the slot is
-already occupied by key Ki . The other threads in the CG will linearly probe
-the remaining slots after K i parallelly to find an empty slot where the
-tuple (x, y) can be inserted. If all the slots probed by a CG are occupied
-(indicated by the yellow slots), the CG probes alternate locations in the
-hash table (indicated by the slots K j to K j+3 ) depending on the secondary
-hash function h2 (x) used by double hashing. Threads with ranks 0 and 1 in
-the CG find slots K j and K j+1 occupied, while the threads with ranks 2 and
-3 find slots K j+2 and K j+3 unoccupied. The CG chooses the earliest
-available slot K j+2 as the index for inserting x, and the corresponding CG
-thread attempts to atomically store (x, y) in slot K j+2 . The insert
-operation completes on a successful atomic store. A failed attempt indicates
-a concurrent insert to K j+2, and the CG reattempts insertion starting from
-the next empty slot K j+3 .
+\Htuvm's hash table is static, similar to WarpCore. A limitation of a static
+design is that it requires an estimate of the maximum number of insert
+operations to avoid expensive resizing at run time. Hence, \htuvm conservatively
+allocates an array of size \code{$\lceil (NUM\_INS\_OPS/LOAD\_FACTOR) \rceil$}
+in global memory using managed memory allocation of CUDA, where
+\code{NUM\_INS\_OPS} is the number of insert operations to be performed on the
+hash table and \code{LOAD\_FACTOR} indicates the fraction of filled entries.
+\Htuvm implements three kernels: \code{insert()}, \code{delete()}, and
+\code{search()}. In addition to a pointer to the hash table in GPU global memory
+and an array of input keys to be operated on, each kernel takes additional
+arguments. The \code{insert()} kernel also takes as input an auxiliary array of
+values corresponding to the input keys that are to be inserted, while the
+\code{delete()} and \code{search()} kernels pass an output array as parameter
+which tracks the values (corresponding to the input keys) that were operated on.
+The operations in \htuvm can be invoked both for a single key or for a batch of
+keys; the latter will avoid the overhead of repeated kernel launches. \Htuvm 
+assigns each operation to a cooperative group (CG) which is commonly referred to
+as warp-cooperative work scheduling (WCWS), and has been used in prior work~\cite{gfsl-pact-2017,warpcore-hipc-2020}.
 
-To enable a vanilla UVM support, we incorporate managed memory allocation for
-the hash table array, i.e., replaced calls to cudaMalloc() and cudaMemcpy() with cudaMallocManaged().
-The vanilla UVM implementation described thus far performs very poorly with more than 50%
-oversubscription. A general good-quality hash function distributes the memory accesses across
-different buckets, which leads to touching random pages depending on the input key pattern.
-Oversubscription further leads to many pages storing hash table data to get evicted (based on
-variants of LRU replacement policy implemented by the contemporary NVIDIA GPUs). This gives
-rise to frequent far faults. Far faults are expensive because they incur overheads of page unmapping
-on the CPU, page migration to the GPU, and installing page table entries in the GPU. Multiple
-concurrent warps (or CGs) stall waiting for their respective far faults to be resolved, thereby hurting
-performance [58, 59]. For example, in our experiments (details discussed in later sections), the
-insert() kernel does not finish within even 24 hours with 100% oversubscription5 on a GPU with
-16 GB memory.
-We optimize the data movement in the vanilla UVM implementation by incorporating different
-combinations of memory advise and asynchronous prefetch hints [51]. The best hint combina-
-tion found through empirical evaluation turns out to be cudaMemAdviseSetAccessedBy for the hash
-table array, and both cudaMemAdviseSetAccessedBy and cudaMemPrefetchAsync for the input array
-containing keys to be operated on as well as the auxiliary array of values used by the insert()
-kernel. The first hint conveys that the data structure is going to be predominantly accessed by
-the GPU, allowing the runtime to pre-map the page table entries on the GPU without actually
-migrating the data. The cudaMemPrefetchAsync hint allows the runtime to asynchronously prefetch
-the hinted pages before the kernel starts, thereby reducing the initial far faults. We also experi-
-mented with the cudaMemAdviseSetPreferredLocation and cudaMemAdviseSetReadMostly hints. The
-cudaMemAdviseSetPreferredLocation hint indicates a preferred location (CPU or GPU) for a mem-
-ory region, but it does not improve performance because the hash table pages anyway get evicted
-due to oversubscription. The cudaMemAdviseSetReadMostly hint is not applicable as we update the
-hash table across kernel launches.
-We extend the warpcore design to cudaMallocManaged version for our baseline uvm as a result
-our insert and search functionalities follows the similar patterns like warpcore. The core insert
-function takes a key and a value and the pointer to the hashtable and uses warp intrinsics to find
-an empty slot to insert the key and the value. In case of a duplicate, the value of that key is updated.
-For search, similar lookup logic like insert is followed, but instead of a atomic instruction to insert
-a key, search just returns the value associated to the particular key.
+To enable a vanilla UVM support, we will incorporate managed memory allocation
+for the hash table array, i.e., replaced calls to \code{cudaMalloc()} and
+\code{cudaMemcpy()} with \code{cudaMallocManaged()}. Our initial experiments
+show that the vanilla UVM implementation described thus far performs very poorly
+with more than 50\% oversubscription. A general good-quality hash function 
+distributes the memory accesses across different buckets, which leads to
+touching random pages depending on the input key pattern. Oversubscription
+further leads to many pages storing hash table data to get evicted (based on
+variants of LRU replacement policy implemented by the contemporary NVIDIA GPUs).
+This gives rise to frequent far faults. Far faults are expensive because they
+incur overheads of page unmapping on the CPU, page migration to the GPU, and
+installing page table entries in the GPU. Multiple concurrent warps (or CGs)
+stall waiting for their respective far faults to be resolved, thereby hurting
+performance [58, 59]. For example, in our experiments (details discussed in
+later sections), the insert() kernel does not finish within even 24 hours with
+100% oversubscription5 on a GPU with
+16 GB memory. We optimize the data movement in the vanilla UVM implementation by
+incorporating different combinations of memory advise and asynchronous prefetch
+hints [51]. The best hint combina- tion found through empirical evaluation turns
+out to be cudaMemAdviseSetAccessedBy for the hash table array, and both
+cudaMemAdviseSetAccessedBy and cudaMemPrefetchAsync for the input array
+containing keys to be operated on as well as the auxiliary array of values used
+by the insert() kernel. The first hint conveys that the data structure is going
+to be predominantly accessed by the GPU, allowing the runtime to pre-map the
+page table entries on the GPU without actually migrating the data. The
+cudaMemPrefetchAsync hint allows the runtime to asynchronously prefetch the
+hinted pages before the kernel starts, thereby reducing the initial far faults.
+We also experi- mented with the cudaMemAdviseSetPreferredLocation and
+cudaMemAdviseSetReadMostly hints. The cudaMemAdviseSetPreferredLocation hint
+indicates a preferred location (CPU or GPU) for a mem- ory region, but it does
+not improve performance because the hash table pages anyway get evicted due to
+oversubscription. The cudaMemAdviseSetReadMostly hint is not applicable as we
+update the hash table across kernel launches. We extend the warpcore design to
+cudaMallocManaged version for our baseline uvm as a result our insert and search
+functionalities follows the similar patterns like warpcore. The core insert
+function takes a key and a value and the pointer to the hashtable and uses warp
+intrinsics to find an empty slot to insert the key and the value. In case of a
+duplicate, the value of that key is updated. For search, similar lookup logic
+like insert is followed, but instead of a atomic instruction to insert a key,
+search just returns the value associated to the particular key.
 
 \subsection{Skip Lists with UVM Support}
 
@@ -508,7 +516,9 @@ virtual memory management optimizations and practical implementations, enabling
 more efficient handling of oversubscription and irregular access scenarios in
 future GPU architectures.
 
-{\small
+\clearpage
+
+{\footnotesize
 \bibliographystyle{plain}
 \bibliography{./references/venue-full,./references/references}
 }
