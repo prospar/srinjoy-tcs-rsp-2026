@@ -10,6 +10,7 @@
 \usepackage{cite}
 \usepackage{wrapfig}
 \usepackage{subcaption}
+\usepackage[multiple]{footmisc}
 
 \usepackage{fancyhdr}  % use this package to get a 2 line header
 \pagestyle{fancy}
@@ -37,8 +38,7 @@
   linkcolor=blue,
   % Links to local files will be shown in magenta color (see linking local files)
   filecolor=magenta,
-  pdftitle={}, pdfauthor={Swarnendu Biswas}, pdfsubject={}
-}
+  hyperfootnotes=false}
 
 \newcommand{\htuvm}{\textsf{HT-UVM}\xspace}
 \newcommand{\Htuvm}{\textsf{HT-UVM}\xspace}
@@ -414,6 +414,16 @@ time window. With oversubscription, this increases the possibility of the
 requested page being not resident in the GPU memory hierarchy, leading to
 frequent far faults.
 
+An alternate strategy to deal with oversubscription is to partition the huge
+input workload in multiple batches such that each batch fits within the GPU
+memory, and then launch multiple kernels. Batching as an optimization is
+commonly performed across application domains. \emph{WarpDrive}~\cite{warpdrive}
+proposed a multi-GPU hash table that partitions the input. However, such
+partitioning is programmer-driven, tedious, error-prone, brittle (\ie, will
+break for even larger inputs), and expensive. Furthermore, certain applications
+may require specialized GPU computing algorithms and may preclude manual data
+manipulation~\cite{perks-isc-2023}.
+
 \subsection*{Designing Oversubscribed Data Structures}
 
 Existing techniques, such as prefetching and page replacement policies, optimize
@@ -442,77 +452,31 @@ subsequent stalls during operations improving overall performance In this
 proposal, we will explore possible designs of hash tables, skip lists, and AMQ
 filters that scale with input size.
 
-\section{Ongoing Work}
+\section*{Ongoing Work}
 
-We have designed UVM-based implementation of hash tables with modified structures that performes well even with memory oversubscription. We compared our design with the existing state-of-the-art hashtables like cucollections\href{https://github.com/NVIDIA/cuCollections/tree/dev} and ~\cite{warpcore-hipc-2020}. For valid comparison, we update this models to support memory oversubscription and we observe that they suffer greatly because of far faults. So we designed our hashtable such that these far faults are reduced.
-Our current work is currently under submission in a reputed conference.
+\paragraph*{Evaluate memory hints} We are empirically evaluating the optimal set
+of memory advise and prefetch hints that are applicable for each data structure.
+This is a challenging problem in itself because of the large search space. We
+posit that the optimal set of hints are sensitive to the buffer allocated with
+managed memory, access pattern and sequence length of the input, and the degree
+of oversubscription. An exhaustive evaluation is impractical, and static or
+compile-time solutions~\cite{suv-micro-2024} may generate suboptimal results.
+This adds an extra layer of complexity for the programmer and static program
+analyses~\cite{suv-micro-2024}.
 
-We optimize the data movement in the vanilla UVM implementation by
-incorporating different combinations of memory advise and asynchronous prefetch
-hints [51]. The best hint combination found through empirical evaluation turns
-out to be cudaMemAdviseSetAccessedBy for the hash table array, and both
-cudaMemAdviseSetAccessedBy and cudaMemPrefetchAsync for the input array
-containing keys to be operated on as well as the auxiliary array of values used
-by the insert() kernel. The first hint conveys that the data structure is going
-to be predominantly accessed by the GPU, allowing the runtime to pre-map the
-page table entries on the GPU without actually migrating the data. The
-cudaMemPrefetchAsync hint allows the runtime to asynchronously prefetch the
-hinted pages before the kernel starts, thereby reducing the initial far faults.
-We also experi- mented with the cudaMemAdviseSetPreferredLocation and
-cudaMemAdviseSetReadMostly hints. The cudaMemAdviseSetPreferredLocation hint
-indicates a preferred location (CPU or GPU) for a mem- ory region, but it does
-not improve performance because the hash table pages anyway get evicted due to
-oversubscription. The cudaMemAdviseSetReadMostly hint is not applicable as we
-update the hash table across kernel launches. We extend the warpcore design to
-cudaMallocManaged version for our baseline uvm as a result our insert and search
-functionalities follows the similar patterns like warpcore. The core insert
-function takes a key and a value and the pointer to the hashtable and uses warp
-intrinsics to find an empty slot to insert the key and the value. In case of a
-duplicate, the value of that key is updated. For search, similar lookup logic
-like insert is followed, but instead of a atomic instruction to insert a key,
-search just returns the value associated to the particular key.
+\paragraph*{Other data structures}
+We will extend our exploration to skip lists and AMQ filters. We have completed the literature review for skip lists and working on implementing the baseline GFSL algorithm~\cite{gfsl-pact-2017}. We are still performing a thorough literature review for AMQs. Two-Choice Filter (TCF) is the state-of-the-art filter algorithm for GPUs but does not support counting and hence deletion operations~\cite{gpu-filters-ppopp23}. GPU Quotient Filter (GQF) is the state-of-the-art version for filters that support counting, but has poorer throughput compared to TCF~\cite{gpu-filters-ppopp23}. Our goal is to explore a counting filter that bridges the performance gap between TCF and GQF. Furthermore, our initial experiments with publicly-available TCF and GQF artifacts\footnote{\url{https://github.com/huntermBerkeley/poggers}}\textsuperscript{,}\footnote{\url{https://github.com/huntermBerkeley/gqf-artifacts/tree/v1.2}} show two orders of magnitude drop in the throughput under oversubscription.
 
-To further study the impact of memory advise hints on the page fault volume, we evaluate the
-insert() kernel of HT-UVM with and without these hints using an input sequence that completes
-within a reasonable amount of time when hints are disabled. This input sequence uses monotonically
-increasing unique keys, thereby inducing spatial locality in the access pattern.6 Figure 7a shows the
-volume of far faults observed by the insert() kernel of HT-UVM on a monotonically increasing
-input without any hint, while Figure 7b shows the volume of remote mappings (a reasonable proxy
-for far faults) when hints are enabled. We observe that the number of page faults is significantly
-reduced with memory hints. The hint cudaMemAdviseSetAccessedBy, used for the hash table pages,
+\paragraph*{Comparison with related work}
 
-does not cause data migration, but only sets up virtual to physical address translations in the
-GPU [51]. Instead of evicting the existing pages from GPU memory and migrating pages, this
-hint allows the GPU to access the hash table pages from the CPU’s system memory through the
-communication network (e.g., PCIe or NVLink). These accesses lead to remote mapping events.
-This is why the volume of remote mappings captures the overhead of accessing the hash table
-pages from the system memory. However, remote mappings help only when the degree of GPU
-memory oversubscription is small because remote accesses are faster than serving frequent page
-faults by the driver. As the input sequence length increases, the increasing degree of memory
-oversubscription results in a superpolynomial increase in the volume of remote mappings, as can be
-seen in Figure 7b. This, in turn, increases the communication and contention on the PCIe/NVLink
-leading to overall poor scalability of the HT-UVM design even in the presence of the memory
-advise hints. As a result, frequent use of remote mappings may result in poorer performance than
-page fault serving in certain situations. Thus, the optimal memory advise hints for a data structure
-may depend on the input pattern as well as the input sequence length, adding an extra layer of
-complexity for the programmer and static program analyses [10].
-
-
-
-For most of such problems, the best way currently in usage is to execute the huge input workload in multiple batches such that each workload fits within the GPU memory. For certain cases, where a system has multiple GPUs ~\cite{warpdrive} proposed a multi gpu hashtable that can use both the GPUs and in turn can handle large workloads. But this type of setup is not only expensive but will also run into the same problem for even larger workloads.
-
-We also point out the bottlenecks
-faced by these UVM-based data structure designs and why existing techniques that
-aim at optimizing UVM features fail to address them.
-
-We are planning on extending this idea to amq ie, designing a amq that doesn't suffer a huge performance overhead for memory oversubscription. We are
-also planning on improving the algorithms of the current state-of-the-art amqs such that they receive a substantial performance boost.
+We have completed a first-cut implementation of hash tables that performs well even with memory oversubscription. We will compare our design with existing state-of-the-art approaches for in-memory hash table~\cite{warpcore-hipc-2020,gph-pamd-2025} and also with \NVIDIA's cuCollections library\footnote{\url{https://github.com/NVIDIA/cuCollections}}.
+Both WarpCore and cuCollections need to be extended to support memory oversubscription.
 
 \bigskip
-\noindent In summary, our proposal aims to bridge the gap between theoretical
-virtual memory management optimizations and practical implementations, enabling
-more efficient handling of oversubscription and irregular access scenarios in
-future GPU architectures.
+\noindent In summary, our proposal aims to bridge the gap between available
+tools for optimizing data management and GPU application performance under
+oversubscription, enabling more efficient handling of oversubscription and
+irregular access scenarios for improved scaling.
 
 \clearpage
 
