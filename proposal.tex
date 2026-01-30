@@ -12,6 +12,9 @@
 \usepackage{subcaption}
 \usepackage[multiple]{footmisc}
 
+\usepackage[numbers]{natbib}
+\setlength{\bibsep}{0pt plus 0.3ex}
+
 \usepackage{fancyhdr}  % use this package to get a 2 line header
 \pagestyle{fancy}
 \fancyhf{}
@@ -454,6 +457,42 @@ filters that scale with input size.
 
 \subsection*{Case Study with Third-Party Applications}
 
+We will explore the end-to-end performance benefit of our proposals by
+integrating them with real-world large-scale GPU applications. We have
+identified two applications from the computational biology domain:
+\emph{metagenomics classifier}~\cite{metacache-icpp-2021} and \emph{k-mer counting}. Both applications
+fundamentally create a database of entries that is later searched several times
+to process large-scale genomic datasets.
+
+The metagenomics classifier operates by encoding fixed-length DNA sequences
+(strings) into compact 32-bit keys. Each key is associated with a corresponding
+\textsf{taxon\_id}, which uniquely identifies an organism. These key-value pairs
+are stored in a hash table to enable fast insertion and lookup operations. The
+classifier consists of two primary components. The first component is the
+database construction phase, in which the hash table is populated with encoded
+DNA sequence keys and their associated \textsf{taxon\_ids}. The second component
+is the classification phase, where an input DNA sequence is encoded, queried
+against the hash table, and the matching \textsf{taxon\_id} is returned. The
+returned \textsf{taxon\_id} is then used to determine the organism to which the
+input DNA sequence belongs.
+
+The k-mer counting application employs the same DNA sequence encoding mechanism
+as the metagenomics classifier, wherein fixed-length DNA sequences are mapped to
+compact 32-bit keys. However, the fundamental distinction between the two
+applications lies in the nature of the values stored in the hash table. Instead
+of associating each key with a \textsf{taxon\_id}, k-mer counting 
+maintains a count corresponding to each key. Specifically, the hash table
+records the frequency of occurrence of each encoded DNA sequence, effectively
+capturing how many times a particular k-mer appears in the dataset. This
+frequency information is essential for downstream genomic analyses, such as
+abundance estimation, error correction, and comparative genomics.
+
+For the experimental evaluation, we plan to execute both applications using two
+configurations: a baseline implementation extended to support UVM and our
+proposed design. In each configuration, we will evaluate two underlying data
+structures, a hash table and a skip list, to enable a comprehensive comparison
+of their performance characteristics. We are confident that such a case study will comprehensively showcase the performance and scalability benefits of our proposed data structure designs.
+
 \section*{Ongoing Work}
 
 \paragraph*{Evaluate memory hints} We are empirically evaluating the optimal set
@@ -484,7 +523,7 @@ irregular access scenarios for improved scaling.
 
 \clearpage
 
-{\footnotesize
+{\scriptsize
 \bibliographystyle{plain}
 \bibliography{./references/venue-full,./references/references}
 }

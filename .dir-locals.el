@@ -343,7 +343,7 @@
   .
   ((TeX-master . (expand-file-name "paper.tex"))
    (eval .
-         (let ((bibpath (list (expand-file-name "references.bib"))))
+         (let ((bibpath (list (expand-file-name "references/references.bib"))))
            (setq-local
             reftex-default-bibliography bibpath
             company-bibtex-bibliography bibpath
